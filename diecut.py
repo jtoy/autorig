@@ -5,7 +5,7 @@ from processing import diecut
 def main():
     client = genai.Client()
     
-    imagePath = "tobyturtle.png"
+    imagePath = "resources/hippo.png"
     outputPath = "diecut.png"
 
     diecut(client, imagePath, outputPath)

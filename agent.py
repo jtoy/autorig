@@ -25,7 +25,7 @@ class DiecutTool(BaseTool):
     description: str = (
         "Create a single composite diecut image that preserves the original pose and proportions, "
         "with the character cleanly separated into these 10 parts in the same image: "
-        "head, torso, right_arm, left_arm, right_hand, left_hand, right_leg, left_leg, right_foot, left_foot. "
+        "head, torso, right_arm, left_arm, right_forearm, left_forearm, right_thigh, left_thigh, right_leg, left_leg. "
         "Input: image_path. Output: diecut composite saved to output_path."
     )
     args_schema: Type[BaseModel] = DiecutInput
@@ -45,8 +45,8 @@ class BboxesTool(BaseTool):
     name: str = "bboxes"
     description: str = (
         "Detects exactly 10 body parts in the given image and writes PNG crops into output_folder. "
-        "Output filenames are the labels in English: head, right_arm, left_arm, torso, right_leg, "
-        "left_leg, right_hand, left_hand, right_foot, left_foot (e.g., head.png)."
+        "Output filenames are the labels in English: head, torso, right_arm, left_arm, right_forearm, "
+        "left_forearm, right_thigh, left_thigh, right_leg, left_leg (e.g., head.png)."
     )
     args_schema: Type[BaseModel] = BboxesInput
 
@@ -95,7 +95,7 @@ def removeBackground(pieces_dir: str, use_genai: bool = False, tolerance: int = 
         else:
             remove_background_simple(part_path, tolerance=tolerance)
 
-def agenticDiecut(task: str):
+def agenticDiecut(image_path: str, diecut_output: str, pieces_dir: str):
     model = "gemini-3-pro-preview"
     temperature = 0
     llm = ChatGoogleGenerativeAI(
@@ -110,12 +110,21 @@ def agenticDiecut(task: str):
         model=llm,
         tools=tools,
         system_prompt=(
-            "You are an animator artist. Your mission is to die-cut characters. "
-            "You have tools to: 1) 'diecut' an image, 2) 'bboxes' to extract parts, "
-            "and 3) 'remove_background' from extracted parts. "
-            "Follow the user instructions naturally."
+            "You are an animator artist specializing in character die-cutting. "
+            "You must execute the following steps SEQUENTIALLY. Wait for each tool to finish before calling the next: "
+            "1. Call 'diecut' to create the composite image. "
+            "2. AFTER 'diecut' succeeds, call 'bboxes' to extract the pieces into a folder. "
+            "3. AFTER 'bboxes' succeeds, call 'remove_background' on that folder to clean the pieces. "
+            "DO NOT call these tools in parallel in the same turn, as each depends on the previous one's output."
         ),
         debug=True
+    )
+
+    task = (
+        f"Take the image '{image_path}', first apply diecut saving it as "
+        f"'{diecut_output}', then extract the pieces from that result into the "
+        f"folder '{pieces_dir}', then remove the background from all pieces in "
+        f"that folder."
     )
 
     print(f"Running task: {task}")
@@ -131,15 +140,12 @@ def agenticDiecut(task: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Run diecut + piece extraction with an agent.")
-    parser.add_argument("prompt", nargs="*", help="Natural language command for the agent")
+    parser.add_argument("--image", default="resources/hippo.png", help="Input image path")
+    parser.add_argument("--diecut-output", default="diecut.png", help="Diecut output path")
+    parser.add_argument("--pieces-dir", default="parts", help="Pieces output folder")
     args = parser.parse_args()
 
-    if not args.prompt:
-        parser.print_help()
-        return
-
-    task = " ".join(args.prompt)
-    agenticDiecut(task)
+    agenticDiecut(args.image, args.diecut_output, args.pieces_dir)
 
 if __name__ == "__main__":
     main()

@@ -32,13 +32,13 @@ def bboxes(client, inputPath, outputFolder):
     temperature = 0
     prompt = """
     Task: ONLY detect and return bounding boxes. Do not edit, redraw, or reinterpret the image.
-    Detect exactly these 10 parts of the figure: 'head', 'right_arm', 'left_arm', 'torso', 'right_leg', 'left_leg', 'right_hand', 'left_hand', 'right_foot', 'left_foot'.
+    Detect exactly these 10 parts of the figure: 'head', 'right_arm', 'left_arm', 'torso', 'right_thigh', 'left_thigh', 'right_forearm', 'left_forearm', 'right_leg', 'left_leg'.
     torso: is from neck to hips
-    legs: are from hips to feet
+    thighs: are from hips to knees
+    forearms: are from elbow to fingertips
     arms: are from shoulders to elbows
-    hands: are from elbow to fingertips
-    feet: are from ankles to toes
-    Return exactly 10 bounding boxes in [ymin, xmin, ymax, xmax] format normalized to 0-1000.
+    legs: are from knees to toes
+    Return exactly 10 SEPARATE bounding boxes in [ymin, xmin, ymax, xmax] format normalized to 0-1000.
     Output a JSON array of objects, each with 'box_2d' and 'label'.
     Keep the original drawing exactly as-is: same pose, same fingers, same proportions, same design. No alterations.
     """
@@ -99,12 +99,12 @@ def segmentation_masks(client, inputPath, outputFolder, parts=None):
             "right_arm",
             "left_arm",
             "torso",
+            "right_thigh",
+            "left_thigh",
+            "right_forearm",
+            "left_forearm",
             "right_leg",
             "left_leg",
-            "right_hand",
-            "left_hand",
-            "right_foot",
-            "left_foot",
         ]
 
     parts_list = ", ".join([f"'{part}'" for part in parts])

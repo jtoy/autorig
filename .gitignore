@@ -211,3 +211,5 @@ __marimo__/
 
 # Git worktrees
 .worktrees/
+parts/
+diecut.png

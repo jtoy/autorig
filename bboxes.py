@@ -3,7 +3,7 @@ from processing import bboxes
 
 def main():
     client = genai.Client()
-    image_path = "tobyturtle.png"
+    image_path = "diecut.png"
     output_dir = "parts"
 
     bboxes(client, image_path, output_dir)
