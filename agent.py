@@ -95,7 +95,7 @@ def removeBackground(pieces_dir: str, use_genai: bool = False, tolerance: int = 
         else:
             remove_background_simple(part_path, tolerance=tolerance)
 
-def agenticDiecut(image_path: str, diecut_output: str, pieces_dir: str):
+def agenticDiecut(task: str):
     model = "gemini-3-pro-preview"
     temperature = 0
     llm = ChatGoogleGenerativeAI(
@@ -111,19 +111,11 @@ def agenticDiecut(image_path: str, diecut_output: str, pieces_dir: str):
         tools=tools,
         system_prompt=(
             "You are an animator artist. Your mission is to die-cut characters. "
-            "Follow the process strictly: first run diecut, then run bboxes to generate PNGs "
-            "inside pieces_dir with labels: head, right_arm, left_arm, torso, right_leg, "
-            "left_leg, right_hand, left_hand, right_foot, left_foot. Finally run "
-            "remove_background on that pieces_dir."
+            "You have tools to: 1) 'diecut' an image, 2) 'bboxes' to extract parts, "
+            "and 3) 'remove_background' from extracted parts. "
+            "Follow the user instructions naturally."
         ),
         debug=True
-    )
-
-    task = (
-        f"Take the image '{image_path}', first apply diecut saving it as "
-        f"'{diecut_output}', then extract the pieces from that result into the "
-        f"folder '{pieces_dir}', then remove the background from all pieces in "
-        f"that folder."
     )
 
     print(f"Running task: {task}")
@@ -139,12 +131,15 @@ def agenticDiecut(image_path: str, diecut_output: str, pieces_dir: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Run diecut + piece extraction with an agent.")
-    parser.add_argument("--image", default="tobyturtle.png", help="Input image path")
-    parser.add_argument("--diecut-output", default="diecut_output.png", help="Diecut output path")
-    parser.add_argument("--pieces-dir", default="toby_parts", help="Pieces output folder")
+    parser.add_argument("prompt", nargs="*", help="Natural language command for the agent")
     args = parser.parse_args()
 
-    agenticDiecut(args.image, args.diecut_output, args.pieces_dir)
+    if not args.prompt:
+        parser.print_help()
+        return
+
+    task = " ".join(args.prompt)
+    agenticDiecut(task)
 
 if __name__ == "__main__":
     main()
