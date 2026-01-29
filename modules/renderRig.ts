@@ -1325,6 +1325,11 @@ export async function renderCharacterRig(
     
     // Render all objects
     rigRenderData.objects.forEach(obj => {
+        // Skip rendering if no image data
+        if (!obj.imageData) {
+            return;
+        }
+        
         ctx.save();
         
         // Move to object position
@@ -1336,21 +1341,10 @@ export async function renderCharacterRig(
         // Apply scale
         ctx.scale(obj.scaleX, obj.scaleY);
         
-        // Draw image if available
-        if (obj.imageData) {
-            // Draw from anchor point (center by default)
-            const drawX = -obj.width * obj.anchorX;
-            const drawY = -obj.height * obj.anchorY;
-            ctx.drawImage(obj.imageData, drawX, drawY, obj.width, obj.height);
-        } else {
-            // Fallback: draw colored rectangle
-            const drawX = -obj.width * obj.anchorX;
-            const drawY = -obj.height * obj.anchorY;
-            ctx.fillStyle = '#8B7355';
-            ctx.strokeStyle = '#000';
-            ctx.fillRect(drawX, drawY, obj.width, obj.height);
-            ctx.strokeRect(drawX, drawY, obj.width, obj.height);
-        }
+        // Draw image from anchor point (center by default)
+        const drawX = -obj.width * obj.anchorX;
+        const drawY = -obj.height * obj.anchorY;
+        ctx.drawImage(obj.imageData, drawX, drawY, obj.width, obj.height);
         
         ctx.restore();
     });
