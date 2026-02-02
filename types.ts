@@ -152,23 +152,11 @@ export interface PivotPoint {
 }
 
 /**
- * Render metadata
- */
-export interface RenderMetadata {
-    centerX: number;
-    centerY: number;
-    flipX: boolean;
-    flipHead: boolean;
-    imageScale: number;
-}
-
-/**
  * Complete render data structure
  */
 export interface RigRenderData {
     objects: RenderObject[];
     pivotPoints: PivotPoint[];
-    metadata: RenderMetadata;
 }
 
 /**

@@ -10,11 +10,16 @@
     "watch": "tsc --watch",
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
-    "serve": "http-server -p 8080"
+    "serve": "http-server -p 8080",
+    "test-skia": "npm run build && node dist/test-skia.js tank.json output-tank.png 1000 1000"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^25.2.0",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "skia-canvas": "^3.0.8"
   }
 }

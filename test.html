@@ -26,12 +26,17 @@
     <canvas id="canvas" width="800" height="800"></canvas>
 
     <script type="module">
-        import { renderCharacterRig } from './dist/modules/renderRig.js';
+        import { ImageLoader } from './dist/modules/imageLoad.js';
+        import { CharacterRigRenderer } from './dist/modules/renderRig.js';
 
-        // Load tank.json, cache all images, and render
+        // Load tank.json, cache all images, and render using class-based API
         async function init() {
             try {
                 console.log('🚀 Initializing Tank character renderer...');
+                
+                // Create instances
+                const imageLoader = new ImageLoader();
+                const renderer = new CharacterRigRenderer(imageLoader);
                 
                 // Load character data
                 const response = await fetch('tank.json');
@@ -41,8 +46,8 @@
                 // Get canvas
                 const canvas = document.getElementById('canvas');
                 
-                // renderCharacterRig automatically loads and caches images
-                await renderCharacterRig(canvas, tankData);
+                // Renderer automatically loads and caches images
+                await renderer.render(canvas, tankData);
 
                 console.log('✓ Tank character rendered successfully');
             } catch (error) {
