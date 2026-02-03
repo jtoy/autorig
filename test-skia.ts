@@ -122,7 +122,7 @@ async function main() {
         
         // Parse command line arguments
         const args = process.argv.slice(2);
-        const inputFile = args[0] || 'tank_truncated.json';
+        const inputFile = args[0] || 'tank.json';
         const outputFile = args[1] || 'output.png';
         const width = parseInt(args[2]) || 1000;
         const height = parseInt(args[3]) || 1000;
