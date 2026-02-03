@@ -79,7 +79,7 @@ class RemoveBackgroundTool(BaseTool):
             return f"Error running removeBackground: {str(e)}"
 
 
-def removeBackground(pieces_dir: str, use_genai: bool = False, tolerance: int = 30):
+def removeBackground(pieces_dir: str, use_genai: bool = True, tolerance: int = 30):
     if not os.path.isdir(pieces_dir):
         raise FileNotFoundError(f"Parts folder not found: {pieces_dir}")
 
@@ -88,8 +88,6 @@ def removeBackground(pieces_dir: str, use_genai: bool = False, tolerance: int = 
             continue
 
         part_path = os.path.join(pieces_dir, filename)
-        base_name = os.path.splitext(filename)[0]
-
         if use_genai:
             remove_background_genai(client, part_path, tolerance=tolerance)
         else:

@@ -17,13 +17,13 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
     temperature = 0
     prompt = """
     EXTRACT the character into 10 separate pieces on a white background: 
-    head, torso, right_arm, left_arm, right_forearm, left_forearm, right_thigh, left_thigh, right_leg, left_leg.
-
-    Debes mantener la postura, aspect ratio y no modificar el estilo intrinseco, de lo contrario es inservible.
-    Es literalmente cortar las partes visibles y recrear las que no se ven siguiendo el estilo del dibujo original.
-    Separa claramente las partes, no las superpongas. Debe ser las 10 pedidas.
-
-    Image 1 is the example of an input. Image 2 is the expected output format, use it as a guide but not as a model. Image 3 is the input to process.
+    head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
+    MUST be 10 EXACTLY.
+    You have to put the pieces along the horizontal axis, with some spacing in between. As the example shows.
+    Keep the original position, style, line weight, proportions, and details EXACTLY as in the original image.
+    Please keep attention to the hands. We do not have common fingers! Do not try to redraw or modify them.
+    
+    Image 1 is the example of an input. Image 2 is the example of a good diecut, use it as a guide but not as a model. Image 3 is the input to process.
     """
 
     if not os.path.exists(imagePath):
@@ -31,7 +31,7 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
 
     # Load zero-shot examples
     example_input_path = os.path.join(os.path.dirname(__file__), "..", "resources", "tobyturtle.png")
-    example_output_path = os.path.join(os.path.dirname(__file__), "..", "resources", "tobyturtle-diecut.png")
+    example_output_path = os.path.join(os.path.dirname(__file__), "..", "resources", "tobyturtle-diecut2.png")
     
     example_input = Image.open(example_input_path)
 
@@ -57,11 +57,26 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         Reject if there are any style changes, finger/detail modifications, pose/layout changes,
         missing/extra parts, or labels. Reply with 'REJECTED' and a brief reason if any issue exists.
         Reply with 'APPROVED' only if it is a faithful extraction.
+        The diecut parts must be placed along the horizontal axis with some spacing in between, as shown in the example:
+        head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
+        MUST be 10 EXACTLY.
+
+        Write the things to correct as a bulleted list. Like this:
+        Things to correct:
+        - Reason 1
+        - Reason 2
+        
+        
+        Image 1 example. Image 2 example diecut. Image 3 is the image to diecut. Image 4 is the DIECUT to verify.
         """
 
         verify_response = client.models.generate_content(
             model=verifier_model,
             contents=[
+                types.Part.from_bytes(data=pil_to_bytes(example_input), mime_type="image/png"),
+                types.Part.from_text(text="EXAMPLE OF CHARACTER INPUT"),
+                types.Part.from_bytes(data=pil_to_bytes(example_output), mime_type="image/png"),
+                types.Part.from_text(text="EXAMPLE OF A GOOD DIECUT"),
                 types.Part.from_text(text=verify_prompt),
                 types.Part.from_text(text="ORIGINAL"),
                 types.Part.from_bytes(data=original_bytes, mime_type="image/png"),
@@ -80,22 +95,21 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         config=types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"],
             temperature=temperature,
+            image_config=types.ImageConfig(
+                aspect_ratio="16:9",
+                # image_size="1K",
+            ),
         ),
     )
 
-    round_prompts = [
-        prompt,
-        "Fix any style drift. Keep line weight, proportions, and fingers exactly as in the original. No redraws, only clean cutout.",
-        "Final pass. If anything changed (style, fingers, pose, or layout), revert to a faithful extraction."
-    ]
-
+    round_prompts = 5
     generated_bytes = None
     generated_mime = None
     last_feedback = None
-    for round_index, round_prompt in enumerate(round_prompts, start=1):
+    for round_index in range(1, round_prompts + 1):
         if round_index == 1:
             message_parts = [
-                types.Part.from_text(text=round_prompt),
+                types.Part.from_text(text=prompt),
                 types.Part.from_text(text="Example Input"),
                 types.Part.from_bytes(data=pil_to_bytes(example_input), mime_type="image/png"),
                 types.Part.from_text(text="Example Output"),
@@ -106,14 +120,8 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         else:
             if generated_bytes is None:
                 raise ValueError("No generated image returned from previous round.")
-            if last_feedback:
-                round_prompt = f"{round_prompt}\nReviewer feedback: {last_feedback}\nFix ONLY these issues without changing anything else."
             message_parts = [
-                types.Part.from_text(text=round_prompt),
-                types.Part.from_text(text="ORIGINAL"),
-                types.Part.from_bytes(data=pil_to_bytes(image), mime_type="image/png"),
-                types.Part.from_text(text="PREVIOUS OUTPUT"),
-                types.Part.from_bytes(data=generated_bytes, mime_type=generated_mime or "image/png"),
+                types.Part.from_text(text=last_feedback),
             ]
 
         response = chat.send_message(message_parts)
@@ -125,7 +133,7 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         print(f"Verification Result (round {round_index}): {feedback}")
         last_feedback = None if approved else feedback
 
-        if round_index == len(round_prompts) and not approved:
+        if round_index == round_prompts and not approved:
             if fail_on_review:
                 print("Final review failed; saving output and raising error per fail_on_review=True.")
             else:

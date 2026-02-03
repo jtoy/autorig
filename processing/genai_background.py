@@ -18,7 +18,7 @@ def remove_background_genai(client, image_path: str, tolerance: int = 30):
 
     change_background(client, image_path, "black", black_path)
     change_background(client, image_path, "white", white_path)
-    change_alpha(black_path, white_path, image_path, threshold=tolerance)
+    change_alpha(black_path, white_path, image_path)
 
     if os.path.exists(black_path):
         os.remove(black_path)
