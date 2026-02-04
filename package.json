@@ -3,23 +3,51 @@
   "version": "1.0.0",
   "description": "Rendering-agnostic character rig system with TypeScript",
   "type": "module",
-  "main": "./dist/renderRig.js",
-  "types": "./dist/renderRig.d.ts",
+  "main": "./dist/modules/renderRig.js",
+  "types": "./dist/modules/renderRig.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/modules/renderRig.d.ts",
+      "import": "./dist/modules/renderRig.js"
+    },
+    "./imageLoad": {
+      "types": "./dist/modules/imageLoad.d.ts",
+      "import": "./dist/modules/imageLoad.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
-    "test-skia": "npm run build && node dist/test-skia.js tank.json output-tank.png 1000 1000"
+    "test-skia": "npm run build && node dist/test-skia.js tank.json output-tank.png 1000 1000",
+    "prepublishOnly": "npm run clean && npm run build"
   },
+  "keywords": [
+    "character",
+    "rig",
+    "animation",
+    "canvas",
+    "rendering",
+    "2d"
+  ],
   "author": "liaokira",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.2.0",
     "typescript": "^5.3.3"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "skia-canvas": "^3.0.8"
   },
   "repository": {

@@ -1,0 +1,11 @@
+/node_modules
+*.ts
+!*.d.ts
+tsconfig.json
+.git
+.gitignore
+test.html
+test-p5.html
+test-skia.ts
+tank.json
+tank_truncated.json
