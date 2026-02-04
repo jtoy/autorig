@@ -164,3 +164,61 @@ export interface RigRenderData {
  */
 export type ImageLoadCallback = (key: string, img: HTMLImageElement) => void;
 export type ImageErrorCallback = (key: string, error: Event | string) => void;
+
+/**
+ * Eye direction type
+ */
+export type EyeDirection = 'left' | 'right' | 'up' | 'down' | 'center' | 'up-left' | 'up-right' | 'down-left' | 'down-right' | '';
+
+/**
+ * Eyelid state
+ */
+export type EyelidState = 'open' | 'half-closed' | 'closed';
+
+/**
+ * Eye movement configuration
+ */
+export interface EyeMovementConfig {
+    direction?: EyeDirection;
+    targetPosition?: Position;
+    leftIrisXCoor?: number;
+    leftIrisYCoor?: number;
+    rightIrisXCoor?: number;
+    rightIrisYCoor?: number;
+}
+
+/**
+ * Eye state for tracking animation
+ */
+export interface EyeState {
+    // Movement tracking
+    eyeLastUpdatedTime: number;
+    eyeUpdateInterval: number;
+    currentDirection: EyeDirection;
+    
+    // Blink tracking
+    eyeLidLastUpdatedTime: number | null;
+    eyeLidUpdateInterval: number;
+    currentEyeLidCount: number;
+    currentEyeLidState: EyelidState;
+    blinkDuration: number;
+    nextBlinkOffset: number;
+    
+    // Current iris positions
+    leftIrisX: number;
+    leftIrisY: number;
+    rightIrisX: number;
+    rightIrisY: number;
+}
+
+/**
+ * Eye rendering data
+ */
+export interface EyeRenderData {
+    leftEye?: RenderObject;
+    rightEye?: RenderObject;
+    leftIris?: RenderObject;
+    rightIris?: RenderObject;
+    leftEyelid?: RenderObject;
+    rightEyelid?: RenderObject;
+}

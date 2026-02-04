@@ -1,0 +1,377 @@
+/**
+ * Eye System Module
+ * Handles eye blinking, gaze direction, and eye movement for character rigs
+ */
+
+import type {
+    EyeData,
+    EyeDirection,
+    EyelidState,
+    EyeMovementConfig,
+    EyeState,
+    Position
+} from '../types.js';
+
+/**
+ * EyeSystem class - Manages eye animation, blinking, and gaze for characters
+ */
+export class EyeSystem {
+    private state: EyeState;
+    private eyeData: EyeData;
+    private characterId: string;
+
+    /**
+     * Default eye movement ranges for different directions
+     */
+    private static readonly EYE_MOVEMENT_RANGES: Record<EyeDirection, { x: number; y: number }> = {
+        'left': { x: -5, y: 0 },
+        'right': { x: 5, y: 0 },
+        'up': { x: 0, y: -3 },
+        'down': { x: 0, y: 3 },
+        'center': { x: 0, y: 0 },
+        'up-left': { x: -4, y: -2 },
+        'up-right': { x: 4, y: -2 },
+        'down-left': { x: -4, y: 2 },
+        'down-right': { x: 4, y: 2 },
+        '': { x: 0, y: 0 }
+    };
+
+    /**
+     * Creates a new EyeSystem instance
+     * @param characterId - Unique identifier for the character
+     * @param eyeData - Eye configuration data from rig
+     */
+    constructor(characterId: string, eyeData: EyeData) {
+        this.characterId = characterId;
+        this.eyeData = eyeData;
+        
+        // Initialize state
+        this.state = {
+            eyeLastUpdatedTime: -1,
+            eyeUpdateInterval: 0.75,
+            currentDirection: 'center',
+            
+            eyeLidLastUpdatedTime: null,
+            eyeLidUpdateInterval: 3.0 + Math.random() * 2.0, // 3-5 seconds between blinks
+            currentEyeLidCount: 0,
+            currentEyeLidState: 'open',
+            blinkDuration: 0.15,
+            nextBlinkOffset: Math.random() * 0.5, // Random offset for natural timing
+            
+            leftIrisX: eyeData.leftIrisXCoor ?? 0,
+            leftIrisY: eyeData.leftIrisYCoor ?? 0,
+            rightIrisX: eyeData.rightIrisXCoor ?? 0,
+            rightIrisY: eyeData.rightIrisYCoor ?? 0
+        };
+    }
+
+    /**
+     * Get current eye state
+     */
+    getState(): EyeState {
+        return { ...this.state };
+    }
+
+    /**
+     * Reset timing (call when timeline resets or on first frame)
+     */
+    resetTiming(currentTime: number): void {
+        this.state.eyeLastUpdatedTime = currentTime - this.state.eyeUpdateInterval;
+        this.state.eyeLidLastUpdatedTime = null;
+        this.state.currentEyeLidCount = 0;
+        this.state.currentEyeLidState = 'open';
+        this.state.nextBlinkOffset = Math.random() * 0.5;
+    }
+
+    /**
+     * Detect if timeline has reset (time went backwards)
+     */
+    private detectReset(currentTime: number): boolean {
+        const prevTime = this.state.eyeLastUpdatedTime;
+        return Number.isFinite(prevTime) && prevTime > 0 && (currentTime + 0.001 < prevTime);
+    }
+
+    /**
+     * Update blinking animation
+     * @param currentTime - Current time in seconds
+     */
+    updateBlinking(currentTime: number): void {
+        // Initialize blink timing if needed
+        if (this.state.eyeLidLastUpdatedTime === null) {
+            this.state.eyeLidLastUpdatedTime = currentTime - this.state.eyeLidUpdateInterval + this.state.nextBlinkOffset;
+            console.log(`🔧 [${this.characterId}] Blink timing initialized - eyeLidLastUpdatedTime: ${this.state.eyeLidLastUpdatedTime.toFixed(2)}s, interval: ${this.state.eyeLidUpdateInterval.toFixed(2)}s`);
+        }
+
+        const timeSinceBlink = currentTime - this.state.eyeLidLastUpdatedTime;
+        const oldState = this.state.currentEyeLidState;
+        
+        console.log(`⏱️ [${this.characterId}] updateBlinking - currentTime: ${currentTime.toFixed(2)}s, timeSinceBlink: ${timeSinceBlink.toFixed(2)}s, interval: ${this.state.eyeLidUpdateInterval.toFixed(2)}s, currentState: ${this.state.currentEyeLidState}`);
+
+        // Check if it's time to start a new blink
+        if (timeSinceBlink >= this.state.eyeLidUpdateInterval) {
+            this.state.currentEyeLidCount = 1; // Start blinking
+            this.state.eyeLidLastUpdatedTime = currentTime;
+            this.state.currentEyeLidState = 'half-closed';
+        }
+        // If currently blinking, update blink state
+        else if (this.state.currentEyeLidCount > 0) {
+            const blinkProgress = timeSinceBlink / this.state.blinkDuration;
+            
+            if (blinkProgress < 0.5) {
+                // Closing phase (0-50%)
+                this.state.currentEyeLidState = 'half-closed';
+            } else if (blinkProgress < 1.0) {
+                // Fully closed at midpoint (50-100%)
+                this.state.currentEyeLidState = 'closed';
+            } else if (blinkProgress < 1.5) {
+                // Opening phase (100-150%)
+                this.state.currentEyeLidState = 'half-closed';
+            } else {
+                // Blink complete (>150%)
+                this.state.currentEyeLidState = 'open';
+                this.state.currentEyeLidCount = 0;
+                // Randomize next blink interval
+                this.state.eyeLidUpdateInterval = 3.0 + Math.random() * 2.0;
+            }
+        } else {
+            this.state.currentEyeLidState = 'open';
+        }
+
+        // Log when eyelid state changes
+        if (oldState !== this.state.currentEyeLidState) {
+            console.log(`👁️ [${this.characterId}] Eyelid: ${oldState} → ${this.state.currentEyeLidState}`);
+        }
+    }
+
+    /**
+     * Update eye gaze direction
+     * @param currentTime - Current time in seconds
+     * @param config - Movement configuration (direction or target position)
+     */
+    updateGazeDirection(currentTime: number, config: EyeMovementConfig): void {
+        // Update last updated time
+        this.state.eyeLastUpdatedTime = currentTime;
+
+        // Direct iris position control (manual positioning)
+        if (config.leftIrisXCoor !== undefined || config.leftIrisYCoor !== undefined ||
+            config.rightIrisXCoor !== undefined || config.rightIrisYCoor !== undefined) {
+            
+            if (config.leftIrisXCoor !== undefined) {
+                this.state.leftIrisX = config.leftIrisXCoor;
+            }
+            if (config.leftIrisYCoor !== undefined) {
+                this.state.leftIrisY = config.leftIrisYCoor;
+            }
+            if (config.rightIrisXCoor !== undefined) {
+                this.state.rightIrisX = config.rightIrisXCoor;
+            }
+            if (config.rightIrisYCoor !== undefined) {
+                this.state.rightIrisY = config.rightIrisYCoor;
+            }
+            
+            this.state.currentDirection = ''; // Custom position
+            return;
+        }
+
+        // Direction-based movement
+        if (config.direction !== undefined) {
+            this.setEyeDirection(config.direction);
+            return;
+        }
+
+        // Target position-based movement
+        if (config.targetPosition) {
+            const direction = this.calculateDirectionToPosition(config.targetPosition);
+            this.setEyeDirection(direction);
+        }
+    }
+
+    /**
+     * Set eye direction using predefined movement ranges
+     */
+    setEyeDirection(direction: EyeDirection): void {
+        this.state.currentDirection = direction;
+        
+        const movement = EyeSystem.EYE_MOVEMENT_RANGES[direction] || { x: 0, y: 0 };
+        
+        // Apply movement to base positions from eyeData
+        const baseLeftX = this.eyeData.leftIrisXCoor ?? 0;
+        const baseLeftY = this.eyeData.leftIrisYCoor ?? 0;
+        const baseRightX = this.eyeData.rightIrisXCoor ?? 0;
+        const baseRightY = this.eyeData.rightIrisYCoor ?? 0;
+        
+        this.state.leftIrisX = baseLeftX + movement.x;
+        this.state.leftIrisY = baseLeftY + movement.y;
+        this.state.rightIrisX = baseRightX + movement.x;
+        this.state.rightIrisY = baseRightY + movement.y;
+    }
+
+    /**
+     * Calculate eye direction to look at a target position
+     * @param targetPos - Target position in world space
+     * @param characterPos - Character position (optional, defaults to {x: 0, y: 0})
+     */
+    calculateDirectionToPosition(targetPos: Position, characterPos: Position = { x: 0, y: 0 }): EyeDirection {
+        const dx = targetPos.x - characterPos.x;
+        const dy = targetPos.y - characterPos.y;
+        
+        const angle = Math.atan2(dy, dx);
+        const degrees = angle * 180 / Math.PI;
+        
+        // Map angle to direction
+        if (degrees >= -22.5 && degrees < 22.5) return 'right';
+        if (degrees >= 22.5 && degrees < 67.5) return 'down-right';
+        if (degrees >= 67.5 && degrees < 112.5) return 'down';
+        if (degrees >= 112.5 && degrees < 157.5) return 'down-left';
+        if (degrees >= 157.5 || degrees < -157.5) return 'left';
+        if (degrees >= -157.5 && degrees < -112.5) return 'up-left';
+        if (degrees >= -112.5 && degrees < -67.5) return 'up';
+        if (degrees >= -67.5 && degrees < -22.5) return 'up-right';
+        
+        return 'center';
+    }
+
+    /**
+     * Random eye movement (simulates natural eye wandering)
+     */
+    randomEyeMovement(): void {
+        const directions: EyeDirection[] = ['left', 'right', 'up', 'down', 'center', 'up-left', 'up-right', 'down-left', 'down-right'];
+        const randomDirection = directions[Math.floor(Math.random() * directions.length)];
+        this.setEyeDirection(randomDirection);
+    }
+
+    /**
+     * Update eye system (handles both blinking and movement timing)
+     * @param currentTime - Current time in seconds
+     * @param isPlaying - Whether animation is playing (controls automatic movements)
+     * @param speakingCharacterPos - Position of speaking character (if any)
+     * @param characterPos - This character's position
+     */
+    update(
+        currentTime: number,
+        isPlaying: boolean = false,
+        speakingCharacterPos?: Position,
+        characterPos: Position = { x: 0, y: 0 }
+    ): void {
+        console.log(`🔍 [${this.characterId}] EyeSystem.update called - time: ${currentTime.toFixed(2)}s, isPlaying: ${isPlaying}`);
+        
+        // Handle timeline reset
+        if (currentTime < 0.1 || this.detectReset(currentTime)) {
+            console.log(`🔄 [${this.characterId}] Timeline reset detected, resetting timing`);
+            this.resetTiming(currentTime);
+        }
+
+        // Always update blinking (works even when paused)
+        console.log(`👁️ [${this.characterId}] Calling updateBlinking...`);
+        this.updateBlinking(currentTime);
+
+        // Eye movement only when playing
+        if (!isPlaying) {
+            return;
+        }
+
+        const timeSinceUpdate = currentTime - this.state.eyeLastUpdatedTime;
+        const shouldUpdate = timeSinceUpdate >= this.state.eyeUpdateInterval;
+
+        if (!shouldUpdate) {
+            return;
+        }
+
+        // Priority 1: Look at speaking character
+        if (speakingCharacterPos) {
+            const shouldLookAtSpeaker = Math.random() < 0.7; // 70% chance to look at speaker
+            
+            if (shouldLookAtSpeaker) {
+                const direction = this.calculateDirectionToPosition(speakingCharacterPos, characterPos);
+                this.updateGazeDirection(currentTime, { direction });
+            } else {
+                this.randomEyeMovement();
+                this.state.eyeLastUpdatedTime = currentTime;
+            }
+            return;
+        }
+
+        // Priority 2: Random eye movement (50% chance)
+        if (Math.random() < 0.5) {
+            this.randomEyeMovement();
+            this.state.eyeLastUpdatedTime = currentTime;
+        }
+    }
+
+    /**
+     * Get current eyelid image key based on state
+     */
+    getEyelidImageKey(side: 'left' | 'right'): string {
+        const prefix = side === 'left' ? 'leftEyeLid' : 'rightEyeLid';
+        
+        switch (this.state.currentEyeLidState) {
+            case 'open':
+                return `eyes.${prefix}Open`;
+            case 'half-closed':
+                return `eyes.${prefix}HalfClosed`;
+            case 'closed':
+                return `eyes.${prefix}Closed`;
+            default:
+                return `eyes.${prefix}Open`;
+        }
+    }
+
+    /**
+     * Get current iris positions
+     */
+    getIrisPositions(): { left: Position; right: Position } {
+        return {
+            left: { x: this.state.leftIrisX, y: this.state.leftIrisY },
+            right: { x: this.state.rightIrisX, y: this.state.rightIrisY }
+        };
+    }
+
+    /**
+     * Get current eyelid state
+     */
+    getEyelidState(): EyelidState {
+        return this.state.currentEyeLidState;
+    }
+
+    /**
+     * Set eye update interval (time between automatic eye movements)
+     */
+    setEyeUpdateInterval(interval: number): void {
+        this.state.eyeUpdateInterval = interval;
+    }
+
+    /**
+     * Set blink interval (time between blinks)
+     */
+    setBlinkInterval(interval: number): void {
+        this.state.eyeLidUpdateInterval = interval;
+    }
+
+    /**
+     * Force immediate blink
+     */
+    forceBlink(): void {
+        this.state.currentEyeLidCount = 1;
+        this.state.currentEyeLidState = 'closed';
+        this.state.eyeLidLastUpdatedTime = Date.now() / 1000; // Use current time
+    }
+
+    /**
+     * Get debug info
+     */
+    getDebugInfo(): string {
+        return `Eye System [${this.characterId}]
+  Direction: ${this.state.currentDirection}
+  Eyelid: ${this.state.currentEyeLidState}
+  Iris L: (${this.state.leftIrisX.toFixed(1)}, ${this.state.leftIrisY.toFixed(1)})
+  Iris R: (${this.state.rightIrisX.toFixed(1)}, ${this.state.rightIrisY.toFixed(1)})
+  Last Update: ${this.state.eyeLastUpdatedTime.toFixed(2)}s`;
+    }
+}
+
+/**
+ * Factory function to create eye system from rig data
+ */
+export function createEyeSystem(characterId: string, eyeData: EyeData): EyeSystem {
+    return new EyeSystem(characterId, eyeData);
+}

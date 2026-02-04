@@ -402,10 +402,26 @@ export class CharacterRigRenderer {
             });
         }
         
-        // Left Eye Lid
-        const leftEyeLidImage = loadedImages['eyes.leftEyeLidOpen'] || 
-                               loadedImages['eyes.leftEyeLidHalfClosed'] || 
-                               loadedImages['eyes.leftEyeLidClosed'];
+        // Left Eye Lid - select image based on current eyelid state
+        const eyelidState = eyes.eyelidState || 'open'; // Default to 'open'
+        
+        // Select the correct image based on eyelid state
+        let leftEyeLidImage;
+        if (eyelidState === 'closed') {
+            leftEyeLidImage = loadedImages['eyes.leftEyeLidClosed'];
+        } else if (eyelidState === 'half-closed') {
+            leftEyeLidImage = loadedImages['eyes.leftEyeLidHalfClosed'];
+        } else {
+            leftEyeLidImage = loadedImages['eyes.leftEyeLidOpen'];
+        }
+        
+        // Fallback to any available eyelid image if the specific one isn't loaded
+        if (!leftEyeLidImage) {
+            leftEyeLidImage = loadedImages['eyes.leftEyeLidOpen'] || 
+                             loadedImages['eyes.leftEyeLidHalfClosed'] || 
+                             loadedImages['eyes.leftEyeLidClosed'];
+        }
+        
         if (visibility.leftEyeLid !== false && leftEyeLidImage && eyes) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
             const headRot = rotations["head"] || 0;
@@ -452,10 +468,24 @@ export class CharacterRigRenderer {
             });
         }
         
-        // Right Eye Lid
-        const rightEyeLidImage = loadedImages['eyes.rightEyeLidOpen'] || 
-                                loadedImages['eyes.rightEyeLidHalfClosed'] || 
-                                loadedImages['eyes.rightEyeLidClosed'];
+        // Right Eye Lid - select image based on current eyelid state (same state for both eyes)
+        // Select the correct image based on eyelid state
+        let rightEyeLidImage;
+        if (eyelidState === 'closed') {
+            rightEyeLidImage = loadedImages['eyes.rightEyeLidClosed'];
+        } else if (eyelidState === 'half-closed') {
+            rightEyeLidImage = loadedImages['eyes.rightEyeLidHalfClosed'];
+        } else {
+            rightEyeLidImage = loadedImages['eyes.rightEyeLidOpen'];
+        }
+        
+        // Fallback to any available eyelid image if the specific one isn't loaded
+        if (!rightEyeLidImage) {
+            rightEyeLidImage = loadedImages['eyes.rightEyeLidOpen'] || 
+                              loadedImages['eyes.rightEyeLidHalfClosed'] || 
+                              loadedImages['eyes.rightEyeLidClosed'];
+        }
+        
         if (visibility.rightEyeLid !== false && rightEyeLidImage && eyes) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
             const headRot = rotations["head"] || 0;
