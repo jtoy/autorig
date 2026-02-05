@@ -17,6 +17,14 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
+    },
+    "./p5": {
+      "types": "./dist/modules/adapters/p5Renderer.d.ts",
+      "import": "./dist/modules/adapters/p5Renderer.js"
+    },
+    "./skia": {
+      "types": "./dist/modules/adapters/skiaRenderer.d.ts",
+      "import": "./dist/modules/adapters/skiaRenderer.js"
     }
   },
   "files": [
@@ -31,6 +39,8 @@
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
     "test-skia": "npm run build && node dist/test-skia.js tank.json output-tank.png 1000 1000",
+    "test-skia-simple": "npm run build && node dist/test-skia-simple.js tank.json output-tank-simple.png 1000 1000",
+    "test-skia-advanced": "npm run build && node dist/test-skia-advanced.js tank.json output-tank-advanced.png",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
