@@ -20,7 +20,7 @@ import type {
  * CharacterRigRenderer class - Handles character rig computation and rendering
  */
 export class CharacterRigRenderer {
-    private imageLoader: ImageLoader;
+    protected imageLoader: ImageLoader;
 
     /**
      * Creates a new CharacterRigRenderer instance
