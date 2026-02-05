@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tank Character Test - p5.js</title>
+    <title>Tank Character - p5.js (Simplified)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <style>
         body {
@@ -20,172 +20,80 @@
         #canvas-container {
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-
+        .info {
+            color: #ecf0f1;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .code {
+            background: #34495e;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin-top: 10px;
+            max-width: 600px;
+        }
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
+    <div class="info">
+        <h2>Simplified p5.js API</h2>
+        <div class="code">
+            Only 3 lines of setup code!<br>
+            const renderer = new P5Renderer(p);<br>
+            await renderer.loadImages(rigData);<br>
+            renderer.render(rigData);
+        </div>
+    </div>
 
     <script type="module">
-        import { ImageLoader } from './dist/modules/imageLoad.js';
-        import { CharacterRigRenderer } from './dist/modules/renderRig.js';
+        import { P5Renderer } from './dist/modules/adapters/p5Renderer.js';
 
-        /**
-         * Minimal p5.js adapter - extends ImageLoader to use p5's loadImage
-         * Reuses all base class logic (resolveImageSource, caching, image collection)
-         */
-        class P5ImageLoader extends ImageLoader {
-            constructor(p5Instance) {
-                super();
-                this.p5 = p5Instance;
-            }
-
-            /**
-             * Override only the actual image loading to use p5.loadImage
-             * All other logic (URL resolution, caching, collection) comes from base class
-             */
-            loadImage(key, imageData, onLoad, onError) {
-                const imageUrl = this.resolveImageSource(imageData);
-                
-                if (!imageUrl) {
-                    console.warn(`Could not resolve image source for ${key}: ${imageData}`);
-                    if (onError) onError(key, 'Invalid image source');
-                    return;
-                }
-
-                // Check cache first (from base class)
-                const cached = this.getCachedImage(key);
-                if (cached) {
-                    console.log(`✓ Using cached image for ${key}`);
-                    if (onLoad) onLoad(key, cached);
-                    return;
-                }
-
-                console.log(`📥 Loading image for ${key}...`);
-                
-                // Use p5.loadImage instead of new Image()
-                this.p5.loadImage(
-                    imageUrl,
-                    (img) => {
-                        console.log(`✓ Successfully loaded ${key} (${img.width}x${img.height})`);
-                        this.cacheImage(key, img); // Use base class caching
-                        if (onLoad) onLoad(key, img);
-                    },
-                    (err) => {
-                        console.error(`✗ Failed to load ${key}:`, err);
-                        if (onError) onError(key, err);
-                    }
-                );
-            }
-            
-            // Inherit loadAllRigImages from base class - it uses loadImage() which we overrode
-            // No need to rewrite image collection logic!
-        }
-
-        /**
-         * p5.js sketch
-         */
         const sketch = (p) => {
             let rigData;
-            let loadedImages;
             let renderer;
-            let imageLoader;
-            let isLoaded = false;
 
             p.setup = async function() {
-                // Create canvas
-                const canvas = p.createCanvas(800, 800);
-                canvas.parent('canvas-container');
-                
-                // Set background
+                p.createCanvas(800, 800).parent('canvas-container');
                 p.background(240);
-                
+
                 try {
-                    // Create p5-specific image loader (minimal override)
-                    imageLoader = new P5ImageLoader(p);
-                    
-                    // Create renderer - uses ImageLoader interface without knowing about p5
-                    renderer = new CharacterRigRenderer(imageLoader);
-                    
                     // Load character data
                     const response = await fetch('tank.json');
                     rigData = await response.json();
-                    console.log('✓ Loaded tank.json');
-                    
-                    // Load all images - uses base class loadAllRigImages which calls our overridden loadImage
-                    loadedImages = await imageLoader.loadAllRigImages(rigData);
-                    
-                    isLoaded = true;
-                    
-                    // Trigger initial draw
+
+                    // 🎉 SIMPLIFIED API - Only 2 lines!
+                    renderer = new P5Renderer(p);
+                    await renderer.loadImages(rigData);
+
                     p.redraw();
-                    
                 } catch (error) {
-                    console.error('❌ Failed to load:', error);
+                    console.error('Failed to load:', error);
                 }
             };
 
             p.draw = function() {
+                if (!renderer || !renderer.ready()) return;
 
-                // Clear background
                 p.background(240);
-                
-                // Compute rig render data using the existing renderer
-                const rigRenderData = renderer.computeCharacterRigData(rigData, {
-                    canvasWidth: p.width,
-                    canvasHeight: p.height,
-                    cameraOffset: { x: 0, y: 0 },
-                    loadedImages: loadedImages
-                });
-                
-                // Render all objects using p5.js
-                rigRenderData.objects.forEach(obj => {
-                    if (!obj.imageData) return;
-                    
-                    p.push();
-                    
-                    // Move to object position
-                    p.translate(obj.x, obj.y);
-                    
-                    // Apply rotation
-                    p.rotate(obj.rotation);
-                    
-                    // Apply scale
-                    p.scale(obj.scaleX, obj.scaleY);
-                    
-                    // Draw image from anchor point
-                    const drawX = -obj.width * obj.anchorX;
-                    const drawY = -obj.height * obj.anchorY;
-                    p.image(obj.imageData, drawX, drawY, obj.width, obj.height);
-                    
-                    p.pop();
-                });
-                
-                // Draw pivot points
-                rigRenderData.pivotPoints.forEach(pivot => {
-                    p.push();
-                    p.fill(0, 150, 255, 230);
-                    p.stroke(0);
-                    p.strokeWeight(1);
-                    p.circle(pivot.x, pivot.y, 8);
-                    p.pop();
-                });
-                
-                // Stop continuous drawing (only redraw on mousePressed)
+
+                // 🎉 One line to render!
+                renderer.renderRig(rigData, {
+                    width: p.width,
+                    height: p.height
+                }, true); // true = show pivot points
+
                 p.noLoop();
             };
 
-            // Redraw on mouse click
             p.mousePressed = function() {
-                if (isLoaded && p.mouseX >= 0 && p.mouseX <= p.width && 
-                    p.mouseY >= 0 && p.mouseY <= p.height) {
-                    console.log('Redrawing');
+                if (renderer && renderer.ready()) {
                     p.redraw();
                 }
             };
         };
 
-        // Create p5 instance
         new p5(sketch);
     </script>
 </body>

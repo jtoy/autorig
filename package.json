@@ -38,9 +38,7 @@
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
-    "test-skia": "npm run build && node dist/test-skia.js tank.json output-tank.png 1000 1000",
-    "test-skia-simple": "npm run build && node dist/test-skia-simple.js tank.json output-tank-simple.png 1000 1000",
-    "test-skia-advanced": "npm run build && node dist/test-skia-advanced.js tank.json output-tank-advanced.png",
+    "test-skia": "npm run build && node dist/test-skia.js assets/tank.json output-tank.png 1000 1000",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
