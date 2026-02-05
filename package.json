@@ -14,19 +14,18 @@
       "types": "./dist/modules/imageLoad.d.ts",
       "import": "./dist/modules/imageLoad.js"
     },
-    "./eyeSystem": {
-      "types": "./dist/modules/eyeSystem.d.ts",
-      "import": "./dist/modules/eyeSystem.js"
-    },
-    "./mouthSystem": {
-      "types": "./dist/modules/mouthSystem.d.ts",
-      "import": "./dist/modules/mouthSystem.js"
-    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
     },
-    "./dist/modules/*": "./dist/modules/*"
+    "./p5": {
+      "types": "./dist/modules/adapters/p5Renderer.d.ts",
+      "import": "./dist/modules/adapters/p5Renderer.js"
+    },
+    "./skia": {
+      "types": "./dist/modules/adapters/skiaRenderer.d.ts",
+      "import": "./dist/modules/adapters/skiaRenderer.js"
+    }
   },
   "files": [
     "dist/**/*",
@@ -39,7 +38,7 @@
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
-    "test-skia": "npm run build && node dist/test-skia.js tank.json output-tank.png 1000 1000",
+    "test-skia": "npm run build && node dist/test-skia.js assets/tank.json output-tank.png 1000 1000",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

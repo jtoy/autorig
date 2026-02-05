@@ -27,8 +27,7 @@
   "include": [
     "types.ts",
     "modules/**/*.ts",
-    "test-skia.ts",
-    "test-skia-demo.ts"
+    "test-skia.ts"
   ],
   "exclude": [
     "node_modules",
