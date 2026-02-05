@@ -99,9 +99,13 @@ export class EyeSystem {
         // Initialize blink timing if needed
         if (this.state.eyeLidLastUpdatedTime === null) {
             this.state.eyeLidLastUpdatedTime = currentTime - this.state.eyeLidUpdateInterval + this.state.nextBlinkOffset;
+            console.log(`🔧 [${this.characterId}] Blink timing initialized - eyeLidLastUpdatedTime: ${this.state.eyeLidLastUpdatedTime.toFixed(2)}s, interval: ${this.state.eyeLidUpdateInterval.toFixed(2)}s`);
         }
 
         const timeSinceBlink = currentTime - this.state.eyeLidLastUpdatedTime;
+        const oldState = this.state.currentEyeLidState;
+        
+        console.log(`⏱️ [${this.characterId}] updateBlinking - currentTime: ${currentTime.toFixed(2)}s, timeSinceBlink: ${timeSinceBlink.toFixed(2)}s, interval: ${this.state.eyeLidUpdateInterval.toFixed(2)}s, currentState: ${this.state.currentEyeLidState}`);
 
         // Check if it's time to start a new blink
         if (timeSinceBlink >= this.state.eyeLidUpdateInterval) {
@@ -131,6 +135,11 @@ export class EyeSystem {
             }
         } else {
             this.state.currentEyeLidState = 'open';
+        }
+
+        // Log when eyelid state changes
+        if (oldState !== this.state.currentEyeLidState) {
+            console.log(`👁️ [${this.characterId}] Eyelid: ${oldState} → ${this.state.currentEyeLidState}`);
         }
     }
 
@@ -244,12 +253,16 @@ export class EyeSystem {
         speakingCharacterPos?: Position,
         characterPos: Position = { x: 0, y: 0 }
     ): void {
+        console.log(`🔍 [${this.characterId}] EyeSystem.update called - time: ${currentTime.toFixed(2)}s, isPlaying: ${isPlaying}`);
+        
         // Handle timeline reset
         if (currentTime < 0.1 || this.detectReset(currentTime)) {
+            console.log(`🔄 [${this.characterId}] Timeline reset detected, resetting timing`);
             this.resetTiming(currentTime);
         }
 
         // Always update blinking (works even when paused)
+        console.log(`👁️ [${this.characterId}] Calling updateBlinking...`);
         this.updateBlinking(currentTime);
 
         // Eye movement only when playing
