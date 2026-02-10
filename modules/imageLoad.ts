@@ -232,26 +232,33 @@ export class ImageLoader {
 
     /**
      * Load all images for a character rig and populate the cache
+     * CRITICAL: Images are cached by their ACTUAL PATH (hash/URL), not semantic keys!
+     * This prevents overwriting when switching between variations with different images.
+     * 
      * @param rigData - Character rig data
      * @param useCache - Whether to use existing cache (default: true)
      * @param onProgress - Progress callback
-     * @returns Promise that resolves with the image cache as a plain object
+     * @returns Promise that resolves with the image cache as a plain object (indexed by actual paths)
      */
     async loadAllRigImages(
         rigData: RigData,
         useCache: boolean = true,
         onProgress?: (loaded: number, total: number, failed: number) => void
     ): Promise<Record<string, HTMLImageElement>> {
-        const imagesToLoad: Array<{ key: string; hash: string }> = [];
+        const imagesToLoad: Array<{ hash: string }> = [];
         
         // Collect all image paths from imagePaths
+        // CHANGED: We now ONLY track the actual path/hash, not semantic keys
         if (rigData.imagePaths) {
-            for (const [key, hash] of Object.entries(rigData.imagePaths)) {
+            for (const [, hash] of Object.entries(rigData.imagePaths)) {
                 if (hash && typeof hash === 'string' && !hash.includes('[MEDIA_REMOVED]')) {
-                    const imageKey = `imagePaths.${key}`;
-                    // Skip if already in cache and useCache is true
-                    if (!useCache || !this.imageCache.has(imageKey)) {
-                        imagesToLoad.push({ key: imageKey, hash });
+                    // Check if this actual path is already cached
+                    const alreadyCached = this.imageCache.get(hash);
+                    if (!useCache || !alreadyCached) {
+                        // Not cached - need to load it (but only add once per unique hash)
+                        if (!imagesToLoad.find(item => item.hash === hash)) {
+                            imagesToLoad.push({ hash });
+                        }
                     }
                 }
             }
@@ -259,13 +266,18 @@ export class ImageLoader {
         
         // Collect all eye images
         if (rigData.eyes) {
-            for (const [key, value] of Object.entries(rigData.eyes)) {
+            for (const [eyeKey, value] of Object.entries(rigData.eyes)) {
                 if (typeof value === 'string' && !value.includes('[MEDIA_REMOVED]') && 
-                    (key.includes('Image') || key.includes('Iris') || key.includes('Lid'))) {
-                    const imageKey = `eyes.${key}`;
-                    // Skip if already in cache and useCache is true
-                    if (!useCache || !this.imageCache.has(imageKey)) {
-                        imagesToLoad.push({ key: imageKey, hash: value });
+                    (eyeKey.includes('Image') || eyeKey.includes('Iris') || eyeKey.includes('Lid'))) {
+                    const hash = value;
+                    
+                    // Check if this actual path is already cached
+                    const alreadyCached = this.imageCache.get(hash);
+                    if (!useCache || !alreadyCached) {
+                        // Not cached - need to load it (but only add once per unique hash)
+                        if (!imagesToLoad.find(item => item.hash === hash)) {
+                            imagesToLoad.push({ hash });
+                        }
                     }
                 }
             }
@@ -284,24 +296,42 @@ export class ImageLoader {
             this.imageCache.forEach((img, key) => {
                 result[key] = img;
             });
-            console.log('📦 Image Cache:', result);
+            console.log('📦 Image Cache (indexed by actual paths):', Object.keys(result).map(k => k.substring(0, 50)));
             return result;
         }
         
-        const loadPromises = imagesToLoad.map(({ key, hash }) => {
+        const loadPromises = imagesToLoad.map(({ hash }) => {
             return new Promise<void>((resolve) => {
+                // Double-check cache (might have been added by another concurrent load)
+                const hashCached = this.imageCache.get(hash);
+                if (hashCached) {
+                    console.log(`✓ Already cached: ${hash.substring(0, 50)}...`);
+                    loaded++;
+                    if (onProgress) {
+                        onProgress(loaded, total, failed);
+                    }
+                    resolve();
+                    return;
+                }
+                
+                // Not in cache, load it now
+                // CRITICAL: Use the actual path/hash as the cache key!
                 this.loadImage(
-                    key,
-                    hash,
-                    (loadedKey, img) => {
-                        this.imageCache.set(loadedKey, img);
+                    hash,  // ← Cache key is the actual path, not a semantic key!
+                    hash,  // ← Load from this path
+                    (cacheKey, img) => {
+                        // Cache ONLY by actual path (hash/URL)
+                        // DO NOT cache by semantic keys like "imagePaths.head"
+                        this.imageCache.set(cacheKey, img);
+                        console.log(`💾 Cached image by path: ${cacheKey.substring(0, 50)}... (${img.width}x${img.height})`);
                         loaded++;
                         if (onProgress) {
                             onProgress(loaded, total, failed);
                         }
                         resolve();
                     },
-                    () => {
+                    (cacheKey, error) => {
+                        console.error(`❌ Failed to load: ${cacheKey.substring(0, 50)}...`, error);
                         failed++;
                         if (onProgress) {
                             onProgress(loaded, total, failed);
@@ -316,13 +346,13 @@ export class ImageLoader {
         
         console.log(`✓ Loaded ${loaded}/${total} images (${failed} failed)`);
         
-        // Return cache as plain object
+        // Return cache as plain object (indexed by actual paths)
         const result: Record<string, HTMLImageElement> = {};
         this.imageCache.forEach((img, key) => {
             result[key] = img;
         });
         
-        console.log('📦 Image Cache:', result);
+        console.log('📦 Image Cache (indexed by actual paths):', Object.keys(result).map(k => k.substring(0, 50)));
         
         return result;
     }
