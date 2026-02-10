@@ -51,28 +51,31 @@ export class SkiaImageLoader extends ImageLoader {
         return img;
     }
 
-    /**
-     * Load all rig images asynchronously
-     * Uses the same key format as the original test-skia.ts (imagePaths.*, eyes.*)
-     */
     async loadAllRigImagesAsync(rigData: RigData): Promise<Record<string, any>> {
-        const imagesToLoad: Array<{ key: string; hash: string }> = [];
+        const imagesToLoad: Array<{ hash: string }> = [];
 
-        // Collect all image paths from imagePaths
+        // Collect all unique image paths from imagePaths
+        // CHANGED: We now ONLY track the actual path/hash, not semantic keys
         if (rigData.imagePaths) {
-            for (const [key, hash] of Object.entries(rigData.imagePaths)) {
+            for (const [, hash] of Object.entries(rigData.imagePaths)) {
                 if (hash && typeof hash === 'string' && !hash.includes('[MEDIA_REMOVED]')) {
-                    imagesToLoad.push({ key: `imagePaths.${key}`, hash });
+                    // Only add if not already in list (deduplicate)
+                    if (!imagesToLoad.find(item => item.hash === hash)) {
+                        imagesToLoad.push({ hash });
+                    }
                 }
             }
         }
 
         // Collect all eye images
         if (rigData.eyes) {
-            for (const [key, value] of Object.entries(rigData.eyes)) {
+            for (const [eyeKey, value] of Object.entries(rigData.eyes)) {
                 if (typeof value === 'string' && !value.includes('[MEDIA_REMOVED]') &&
-                    (key.includes('Image') || key.includes('Iris') || key.includes('Lid'))) {
-                    imagesToLoad.push({ key: `eyes.${key}`, hash: value });
+                    (eyeKey.includes('Image') || eyeKey.includes('Iris') || eyeKey.includes('Lid'))) {
+                    // Only add if not already in list (deduplicate)
+                    if (!imagesToLoad.find(item => item.hash === value)) {
+                        imagesToLoad.push({ hash: value });
+                    }
                 }
             }
         }
@@ -85,10 +88,11 @@ export class SkiaImageLoader extends ImageLoader {
 
         // Load all images in parallel
         await Promise.all(
-            imagesToLoad.map(async ({ key, hash }) => {
-                const img = await this.loadImageAsync(key, hash);
+            imagesToLoad.map(async ({ hash }) => {
+                // CRITICAL: Use the actual path/hash as the cache key!
+                const img = await this.loadImageAsync(hash, hash);
                 if (img) {
-                    loadedImages[key] = img;
+                    loadedImages[hash] = img;  // Cache by actual path, not semantic key!
                     loaded++;
                 } else {
                     failed++;
@@ -97,6 +101,7 @@ export class SkiaImageLoader extends ImageLoader {
         );
 
         console.log(`✓ Loaded ${loaded}/${imagesToLoad.length} images (${failed} failed)`);
+        console.log('📦 Image Cache (indexed by actual paths):', Object.keys(loadedImages).map(k => k.substring(0, 50)));
         return loadedImages;
     }
 }

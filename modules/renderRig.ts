@@ -67,6 +67,13 @@ export class CharacterRigRenderer {
             loadedImages = {}
         } = options;
         
+        // HELPER: Look up image by actual path from rigData (not by semantic key!)
+        // This allows multiple variations to coexist in cache without overwriting each other
+        const getImage = (path: string | undefined | null): any => {
+            if (!path) return undefined;
+            return loadedImages[path];
+        };
+        
         // Get rendering parameters from rigData
         const centerX = canvasWidth / 2 + cameraOffset.x;
         const centerY = canvasHeight / 2 + 100 + cameraOffset.y;
@@ -100,6 +107,10 @@ export class CharacterRigRenderer {
             const torsoHeight = dimensions.torso?.height || 120;
             const selfRot = selfRotations["torso"] || 0;
             
+            // CRITICAL FIX: Look up image by ACTUAL PATH from rigData, not semantic key!
+            const torsoImagePath = rigData.imagePaths?.torso;
+            const torsoImage = torsoImagePath ? loadedImages[torsoImagePath] : undefined;
+            
             allObjects.push({
                 name: 'torso',
                 type: 'limb',
@@ -115,7 +126,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 1,
                 imageKey: 'imagePaths.torso',
-                imageData: loadedImages['imagePaths.torso'],
+                imageData: torsoImage,
                 selfRotation: selfRot
             });
         }
@@ -147,6 +158,10 @@ export class CharacterRigRenderer {
                 scaleY: 1
             });
             
+            // CRITICAL FIX: Look up image by ACTUAL PATH from rigData, not semantic key!
+            const headImagePath = rigData.imagePaths?.head;
+            const headImage = headImagePath ? loadedImages[headImagePath] : undefined;
+            
             allObjects.push({
                 name: 'head',
                 type: 'limb',
@@ -161,7 +176,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.head',
-                imageData: loadedImages['imagePaths.head'],
+                imageData: headImage,
                 selfRotation: selfRot,
                 parentTransform: headParentTransform
             });
@@ -195,6 +210,10 @@ export class CharacterRigRenderer {
                 scaleY: 1
             });
             
+            // CRITICAL FIX: Look up image by ACTUAL PATH from rigData
+            const mouthImagePath = rigData.imagePaths?.mouth;
+            const mouthImage = mouthImagePath ? loadedImages[mouthImagePath] : undefined;
+            
             allObjects.push({
                 name: 'mouth',
                 type: 'limb',
@@ -209,13 +228,17 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.mouth',
-                imageData: loadedImages['imagePaths.mouth'],
+                imageData: mouthImage,
                 selfRotation: selfRot
             });
         }
         
         // Left Eye
-        if (visibility.leftEye !== false && loadedImages['eyes.leftEyeImage'] && eyes) {
+        // CRITICAL FIX: Look up image by ACTUAL PATH from rigData.eyes
+        const leftEyeImagePath = eyes?.leftEyeImage;
+        const leftEyeImage = leftEyeImagePath ? loadedImages[leftEyeImagePath] : undefined;
+        
+        if (visibility.leftEye !== false && leftEyeImage && eyes) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
             const headRot = rotations["head"] || 0;
             
@@ -257,12 +280,15 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'eyes.leftEyeImage',
-                imageData: loadedImages['eyes.leftEyeImage']
+                imageData: leftEyeImage
             });
         }
         
-        // Right Eye
-        if (visibility.rightEye !== false && loadedImages['eyes.rightEyeImage'] && eyes) {
+        // Right Eye  
+        const rightEyeImagePath = eyes?.rightEyeImage;
+        const rightEyeImage = getImage(rightEyeImagePath);
+        
+        if (visibility.rightEye !== false && rightEyeImage && eyes) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
             const headRot = rotations["head"] || 0;
             
@@ -304,12 +330,15 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'eyes.rightEyeImage',
-                imageData: loadedImages['eyes.rightEyeImage']
+                imageData: rightEyeImage
             });
         }
         
         // Left Iris
-        if (visibility.leftIris !== false && loadedImages['eyes.leftIris'] && eyes) {
+        const leftIrisImagePath = eyes?.leftIris;
+        const leftIrisImage = getImage(leftIrisImagePath);
+        
+        if (visibility.leftIris !== false && leftIrisImage && eyes) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
             const headRot = rotations["head"] || 0;
             
@@ -351,12 +380,15 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'eyes.leftIris',
-                imageData: loadedImages['eyes.leftIris']
+                imageData: leftIrisImage
             });
         }
         
         // Right Iris
-        if (visibility.rightIris !== false && loadedImages['eyes.rightIris'] && eyes) {
+        const rightIrisImagePath = eyes?.rightIris;
+        const rightIrisImage = getImage(rightIrisImagePath);
+        
+        if (visibility.rightIris !== false && rightIrisImage && eyes) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
             const headRot = rotations["head"] || 0;
             
@@ -398,28 +430,28 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'eyes.rightIris',
-                imageData: loadedImages['eyes.rightIris']
+                imageData: rightIrisImage
             });
         }
         
         // Left Eye Lid - select image based on current eyelid state
         const eyelidState = eyes.eyelidState || 'open'; // Default to 'open'
         
-        // Select the correct image based on eyelid state
+        // Select the correct image based on eyelid state (using actual paths!)
         let leftEyeLidImage;
         if (eyelidState === 'closed') {
-            leftEyeLidImage = loadedImages['eyes.leftEyeLidClosed'];
+            leftEyeLidImage = getImage(eyes?.leftEyeLidClosed);
         } else if (eyelidState === 'half-closed') {
-            leftEyeLidImage = loadedImages['eyes.leftEyeLidHalfClosed'];
+            leftEyeLidImage = getImage(eyes?.leftEyeLidHalfClosed);
         } else {
-            leftEyeLidImage = loadedImages['eyes.leftEyeLidOpen'];
+            leftEyeLidImage = getImage(eyes?.leftEyeLidOpen);
         }
         
         // Fallback to any available eyelid image if the specific one isn't loaded
         if (!leftEyeLidImage) {
-            leftEyeLidImage = loadedImages['eyes.leftEyeLidOpen'] || 
-                             loadedImages['eyes.leftEyeLidHalfClosed'] || 
-                             loadedImages['eyes.leftEyeLidClosed'];
+            leftEyeLidImage = getImage(eyes?.leftEyeLidOpen) || 
+                             getImage(eyes?.leftEyeLidHalfClosed) || 
+                             getImage(eyes?.leftEyeLidClosed);
         }
         
         if (visibility.leftEyeLid !== false && leftEyeLidImage && eyes) {
@@ -469,21 +501,21 @@ export class CharacterRigRenderer {
         }
         
         // Right Eye Lid - select image based on current eyelid state (same state for both eyes)
-        // Select the correct image based on eyelid state
+        // Select the correct image based on eyelid state (using actual paths!)
         let rightEyeLidImage;
         if (eyelidState === 'closed') {
-            rightEyeLidImage = loadedImages['eyes.rightEyeLidClosed'];
+            rightEyeLidImage = getImage(eyes?.rightEyeLidClosed);
         } else if (eyelidState === 'half-closed') {
-            rightEyeLidImage = loadedImages['eyes.rightEyeLidHalfClosed'];
+            rightEyeLidImage = getImage(eyes?.rightEyeLidHalfClosed);
         } else {
-            rightEyeLidImage = loadedImages['eyes.rightEyeLidOpen'];
+            rightEyeLidImage = getImage(eyes?.rightEyeLidOpen);
         }
         
         // Fallback to any available eyelid image if the specific one isn't loaded
         if (!rightEyeLidImage) {
-            rightEyeLidImage = loadedImages['eyes.rightEyeLidOpen'] || 
-                              loadedImages['eyes.rightEyeLidHalfClosed'] || 
-                              loadedImages['eyes.rightEyeLidClosed'];
+            rightEyeLidImage = getImage(eyes?.rightEyeLidOpen) || 
+                              getImage(eyes?.rightEyeLidHalfClosed) || 
+                              getImage(eyes?.rightEyeLidClosed);
         }
         
         if (visibility.rightEyeLid !== false && rightEyeLidImage && eyes) {
@@ -573,7 +605,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.leftUpperArm',
-                imageData: loadedImages['imagePaths.leftUpperArm'],
+                imageData: getImage(rigData.imagePaths?.leftUpperArm),
                 selfRotation: selfRot,
                 parentTransform: upperArmParentTransform
             });
@@ -632,7 +664,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.leftForearm',
-                imageData: loadedImages['imagePaths.leftForearm'],
+                imageData: getImage(rigData.imagePaths?.leftForearm),
                 selfRotation: selfRot,
                 parentTransform: forearmParent
             });
@@ -704,7 +736,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.leftHand',
-                imageData: loadedImages['imagePaths.leftHand'],
+                imageData: getImage(rigData.imagePaths?.leftHand),
                 selfRotation: selfRot
             });
         }
@@ -750,7 +782,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.rightUpperArm',
-                imageData: loadedImages['imagePaths.rightUpperArm'],
+                imageData: getImage(rigData.imagePaths?.rightUpperArm),
                 selfRotation: selfRot,
                 parentTransform: upperArmParentTransform
             });
@@ -809,7 +841,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.rightForearm',
-                imageData: loadedImages['imagePaths.rightForearm'],
+                imageData: getImage(rigData.imagePaths?.rightForearm),
                 selfRotation: selfRot,
                 parentTransform: forearmParent
             });
@@ -881,7 +913,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.rightHand',
-                imageData: loadedImages['imagePaths.rightHand'],
+                imageData: getImage(rigData.imagePaths?.rightHand),
                 selfRotation: selfRot
             });
         }
@@ -927,7 +959,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.leftThigh',
-                imageData: loadedImages['imagePaths.leftThigh'],
+                imageData: getImage(rigData.imagePaths?.leftThigh),
                 selfRotation: selfRot,
                 parentTransform: thighParentTransform
             });
@@ -986,7 +1018,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.leftLeg',
-                imageData: loadedImages['imagePaths.leftLeg'],
+                imageData: getImage(rigData.imagePaths?.leftLeg),
                 selfRotation: selfRot
             });
         }
@@ -1032,7 +1064,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.rightThigh',
-                imageData: loadedImages['imagePaths.rightThigh'],
+                imageData: getImage(rigData.imagePaths?.rightThigh),
                 selfRotation: selfRot,
                 parentTransform: thighParentTransform
             });
@@ -1091,7 +1123,7 @@ export class CharacterRigRenderer {
                 anchorX: 0.5,
                 anchorY: 0.5,
                 imageKey: 'imagePaths.rightLeg',
-                imageData: loadedImages['imagePaths.rightLeg'],
+                imageData: getImage(rigData.imagePaths?.rightLeg),
                 selfRotation: selfRot
             });
         }
