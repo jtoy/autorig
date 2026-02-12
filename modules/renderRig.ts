@@ -350,8 +350,27 @@ export class CharacterRigRenderer {
                 scaleY: 1
             });
             
-            const offsetX: number = Number.isFinite(eyes.leftIrisXCoor) ? eyes.leftIrisXCoor! : -10;
-            const offsetY: number = Number.isFinite(eyes.leftIrisYCoor) ? eyes.leftIrisYCoor! : -5;
+            // Base iris position from rig data
+            let offsetX: number = Number.isFinite(eyes.leftIrisXCoor) ? eyes.leftIrisXCoor! : -10;
+            let offsetY: number = Number.isFinite(eyes.leftIrisYCoor) ? eyes.leftIrisYCoor! : -5;
+            
+            // Apply manual eye positioning if eyePositions exists
+            const eyePositions = (eyes as any).eyePositions;
+            if (eyePositions?.left) {
+                const eyePos = eyePositions.left;
+                const hasEyeMovement = eyePos.x !== undefined && eyePos.y !== undefined && 
+                                      (eyePos.x !== 0 || eyePos.y !== 0);
+                
+                if (hasEyeMovement) {
+                    // eyePos values are in -2 to 2 range
+                    // Scale them to pixel movement (matching the old Body.js behavior)
+                    const movementScale = 5; // Pixels of movement per unit
+                    const deltaX = eyePos.x * movementScale;
+                    const deltaY = eyePos.y * movementScale;
+                    offsetX += deltaX;
+                    offsetY += deltaY;
+                }
+            }
             
             const baseLeftIrisWidth = eyes.leftIrisWidth || 10;
             const baseLeftIrisHeight = eyes.leftIrisHeight || 10;
@@ -400,8 +419,27 @@ export class CharacterRigRenderer {
                 scaleY: 1
             });
             
-            const offsetX: number = Number.isFinite(eyes.rightIrisXCoor) ? eyes.rightIrisXCoor! : 10;
-            const offsetY: number = Number.isFinite(eyes.rightIrisYCoor) ? eyes.rightIrisYCoor! : -5;
+            // Base iris position from rig data
+            let offsetX: number = Number.isFinite(eyes.rightIrisXCoor) ? eyes.rightIrisXCoor! : 10;
+            let offsetY: number = Number.isFinite(eyes.rightIrisYCoor) ? eyes.rightIrisYCoor! : -5;
+            
+            // Apply manual eye positioning if eyePositions exists
+            const eyePositions = (eyes as any).eyePositions;
+            if (eyePositions?.right) {
+                const eyePos = eyePositions.right;
+                const hasEyeMovement = eyePos.x !== undefined && eyePos.y !== undefined && 
+                                      (eyePos.x !== 0 || eyePos.y !== 0);
+                
+                if (hasEyeMovement) {
+                    // eyePos values are in -2 to 2 range
+                    // Scale them to pixel movement (matching the old Body.js behavior)
+                    const movementScale = 5; // Pixels of movement per unit
+                    const deltaX = eyePos.x * movementScale;
+                    const deltaY = eyePos.y * movementScale;
+                    offsetX += deltaX;
+                    offsetY += deltaY;
+                }
+            }
             
             const baseRightIrisWidth = eyes.rightIrisWidth || 10;
             const baseRightIrisHeight = eyes.rightIrisHeight || 10;
