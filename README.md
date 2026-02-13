@@ -51,9 +51,59 @@ await renderer.render(canvas, characterData);
 - ⚡ TypeScript support with full type definitions
 - 🌐 Works in browser and Node.js
 
-## Testing with Command Line
+## Testing
 
-You can quickly test character rigs from the command line using the built-in test script:
+### Automated Test Suite
+
+Run all automated tests to verify rendering and joint movement:
+
+```bash
+# Run all tests (visual verification + joint movement)
+npm test
+
+# Or run tests individually
+npm run test-visual    # Eyes and mouth rendering
+npm run test-joints    # Joint movement and limb positioning
+```
+
+### Visual Verification Test
+
+Verify that eyes and mouth are rendering correctly using automated color comparison:
+
+```bash
+# Test a specific character file
+npm run test-visual
+node dist/tests/test-visual-verification.js character.json
+```
+
+**What it tests:**
+- ✅ Left eye region has rendered content
+- ✅ Right eye region has rendered content  
+- ✅ Mouth region has rendered content
+
+The test uses pixel sampling and color comparison to verify that character features are actually being rendered to the canvas. It calculates expected regions based on the rig data and checks that those regions contain pixels different from the background color.
+
+### Joint Movement Test
+
+Verify that character joints move correctly and limbs appear in expected screen sectors:
+
+```bash
+# Test joint movements
+npm run test-joints
+node dist/tests/test-joint-movement.js character.json
+```
+
+**What it tests:**
+- ✅ **Arm Raised**: Left arm rotates upward and appears in top/middle-left sector
+- ✅ **Leg Forward**: Right leg moves forward and appears in middle/bottom-right sector  
+- ✅ **Head Rotation**: Head turns and remains in top/middle-center sector
+- ✅ **Multiple Joints**: Arms spread and legs move simultaneously (T-pose)
+
+The test modifies joint rotation values and verifies that limbs render in the expected screen sectors by sampling pixels and checking for content (non-background pixels). This ensures the rendering pipeline correctly applies transformations to the character rig.
+
+### Manual Testing with Command Line
+
+You can also manually test character rigs and save rendered output:
 
 ```bash
 # Build the project first

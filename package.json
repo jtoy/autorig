@@ -46,7 +46,10 @@
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
+    "test": "npm run build && node dist/tests/test-visual-verification.js && node dist/tests/test-joint-movement.js",
     "test-skia": "npm run build && node dist/tests/test-skia.js",
+    "test-visual": "npm run build && node dist/tests/test-visual-verification.js",
+    "test-joints": "npm run build && node dist/tests/test-joint-movement.js",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
