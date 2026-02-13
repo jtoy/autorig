@@ -51,6 +51,37 @@ await renderer.render(canvas, characterData);
 - ⚡ TypeScript support with full type definitions
 - 🌐 Works in browser and Node.js
 
+## Testing with Command Line
+
+You can quickly test character rigs from the command line using the built-in test script:
+
+```bash
+# Build the project first
+npm run build
+
+# Run test-skia with default settings (renders tank.json)
+npm run test-skia
+
+# Or run directly with custom parameters:
+node dist/tests/test-skia.js [input.json] [output.png] [width] [height]
+
+# Examples:
+node dist/tests/test-skia.js tank.json output.png 1000 1000
+node dist/tests/test-skia.js character.json render.png 800 600
+```
+
+**Parameters:**
+- `input.json` - Path to your character rig JSON file (default: `assets/tank.json`)
+- `output.png` - Output image filename (default: `output-tank.png`)
+- `width` - Canvas width in pixels (default: `1000`)
+- `height` - Canvas height in pixels (default: `1000`)
+
+The test script will:
+1. Load your character rig JSON
+2. Automatically fetch and cache all images
+3. Render the character to a PNG file
+4. Show pivot points for debugging
+
 ## API
 
 ### ImageLoader

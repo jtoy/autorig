@@ -6,6 +6,6 @@ tsconfig.json
 .gitignore
 test.html
 test-p5.html
-test-skia.ts
+tests/
 tank.json
 tank_truncated.json

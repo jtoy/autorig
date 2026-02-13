@@ -17,8 +17,18 @@ import type {
  */
 export class EyeSystem {
     private state: EyeState;
-    private eyeData: EyeData;
     private characterId: string;
+    
+    /**
+     * Base iris coordinates - immutable snapshot from initial eyeData
+     * Used as reference point for applying manual offsets
+     */
+    private readonly baseIrisCoords: {
+        leftX: number;
+        leftY: number;
+        rightX: number;
+        rightY: number;
+    };
 
     /**
      * Default eye movement ranges for different directions
@@ -43,7 +53,15 @@ export class EyeSystem {
      */
     constructor(characterId: string, eyeData: EyeData) {
         this.characterId = characterId;
-        this.eyeData = eyeData;
+        
+        // Store immutable copy of base iris coordinates
+        // This prevents accumulation when rigData is updated
+        this.baseIrisCoords = {
+            leftX: eyeData.leftIrisXCoor ?? 0,
+            leftY: eyeData.leftIrisYCoor ?? 0,
+            rightX: eyeData.rightIrisXCoor ?? 0,
+            rightY: eyeData.rightIrisYCoor ?? 0
+        };
         
         // Initialize state
         this.state = {
@@ -185,16 +203,11 @@ export class EyeSystem {
         
         const movement = EyeSystem.EYE_MOVEMENT_RANGES[direction] || { x: 0, y: 0 };
         
-        // Apply movement to base positions from eyeData
-        const baseLeftX = this.eyeData.leftIrisXCoor ?? 0;
-        const baseLeftY = this.eyeData.leftIrisYCoor ?? 0;
-        const baseRightX = this.eyeData.rightIrisXCoor ?? 0;
-        const baseRightY = this.eyeData.rightIrisYCoor ?? 0;
-        
-        this.state.leftIrisX = baseLeftX + movement.x;
-        this.state.leftIrisY = baseLeftY + movement.y;
-        this.state.rightIrisX = baseRightX + movement.x;
-        this.state.rightIrisY = baseRightY + movement.y;
+        // Apply movement to base positions (immutable reference)
+        this.state.leftIrisX = this.baseIrisCoords.leftX + movement.x;
+        this.state.leftIrisY = this.baseIrisCoords.leftY + movement.y;
+        this.state.rightIrisX = this.baseIrisCoords.rightX + movement.x;
+        this.state.rightIrisY = this.baseIrisCoords.rightY + movement.y;
     }
 
     /**
@@ -341,6 +354,46 @@ export class EyeSystem {
         this.state.currentEyeLidCount = 1;
         this.state.currentEyeLidState = 'closed';
         this.state.eyeLidLastUpdatedTime = Date.now() / 1000; // Use current time
+    }
+
+    /**
+     * Set manual iris positions from timeline eye_movement actions
+     * This method handles manual eye positioning by applying user-specified offsets
+     * to the base iris coordinates.
+     * 
+     * @param eyePositions - Eye position offsets in -2 to 2 range
+     * @param currentTime - Current time in seconds
+     * 
+     * The eyePositions parameter should have the structure:
+     * {
+     *   left: { x: number, y: number },  // -2 to 2 range
+     *   right: { x: number, y: number }  // -2 to 2 range
+     * }
+     * 
+     * These values are normalized offsets where:
+     * - -2 represents maximum left/down
+     * - 0 represents center
+     * - +2 represents maximum right/up
+     */
+    setManualIrisPositions(
+        eyePositions: { left: { x: number; y: number }; right: { x: number; y: number } },
+        currentTime: number
+    ): void {
+        // Scale factor to convert -2 to 2 range into pixel offsets
+        // This matches the EYE_MOVEMENT_RANGES scale (where max is about 5 pixels)
+        const scaleFactor = 2.5; // 2.5 pixels per unit, so -2 to 2 becomes -5 to 5
+        
+        // Apply manual offsets to base positions (using immutable baseIrisCoords)
+        this.state.leftIrisX = this.baseIrisCoords.leftX + (eyePositions.left.x * scaleFactor);
+        this.state.leftIrisY = this.baseIrisCoords.leftY + (eyePositions.left.y * scaleFactor);
+        this.state.rightIrisX = this.baseIrisCoords.rightX + (eyePositions.right.x * scaleFactor);
+        this.state.rightIrisY = this.baseIrisCoords.rightY + (eyePositions.right.y * scaleFactor);
+        
+        // Update last updated time to prevent automatic movement from overriding manual positioning
+        this.state.eyeLastUpdatedTime = currentTime;
+        
+        // Mark as custom position
+        this.state.currentDirection = '';
     }
 
     /**

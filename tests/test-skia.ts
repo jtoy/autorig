@@ -9,9 +9,9 @@
  *   node dist/test-skia.js [input.json] [output.png] [width] [height]
  */
 
-import { SkiaRenderer } from './modules/adapters/skiaRenderer.js';
+import { SkiaRenderer } from '../modules/adapters/skiaRenderer.js';
 import { readFile } from 'fs/promises';
-import type { RigData } from './types.js';
+import type { RigData } from '../types.js';
 
 async function main() {
     // Parse command line args
