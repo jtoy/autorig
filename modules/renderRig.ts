@@ -185,11 +185,44 @@ export class CharacterRigRenderer {
         // Mouth (child of head)
         if (visibility.mouth !== false) {
             const headPivot = pivotPoints['torso_head'] || { x: 0, y: 0 };
-            const mouthOffset = pivotPoints['head_mouth'] || { x: 0, y: 0 };
-            const mouthWidth = dimensions.mouth?.width || 40;
-            const mouthHeight = dimensions.mouth?.height || 30;
             const selfRot = selfRotations["mouth"] || 0;
             const headRot = rotations["head"] || 0;
+            
+            // Get mouth dimensions and position from rigData.mouth
+            const mouthData = (rigData as any).mouth;
+            let baseMouthWidth = dimensions.mouth?.width || 40;
+            let baseMouthHeight = dimensions.mouth?.height || 30;
+            let mouthSizeScale = 1;
+            
+            // Determine position offset: use xCoor/yCoor from mouth data if available,
+            // otherwise fall back to pivot point system
+            const mouthPivotOffset = pivotPoints['head_mouth'] || { x: 0, y: 0 };
+            let mouthXOffset = mouthPivotOffset.x || 0;
+            let mouthYOffset = mouthPivotOffset.y || 0;
+            
+            // If mouth data is available, use its width, height, size, and override position with xCoor/yCoor
+            if (mouthData && typeof mouthData === 'object') {
+                if (typeof mouthData.width === 'number' && mouthData.width > 0) {
+                    baseMouthWidth = mouthData.width;
+                }
+                if (typeof mouthData.height === 'number' && mouthData.height > 0) {
+                    baseMouthHeight = mouthData.height;
+                }
+                if (typeof mouthData.size === 'number' && mouthData.size > 0) {
+                    mouthSizeScale = mouthData.size;
+                }
+                // xCoor and yCoor from mouth data take precedence over pivot points
+                if (typeof mouthData.xCoor === 'number') {
+                    mouthXOffset = mouthData.xCoor;
+                }
+                if (typeof mouthData.yCoor === 'number') {
+                    mouthYOffset = mouthData.yCoor;
+                }
+            }
+            
+            // Calculate final dimensions with size scaling
+            const finalMouthWidth = baseMouthWidth * mouthSizeScale;
+            const finalMouthHeight = baseMouthHeight * mouthSizeScale;
             
             const headBaseTransform = this.applyTransform(rootTransform, {
                 x: headPivot.x || 0,
@@ -199,27 +232,40 @@ export class CharacterRigRenderer {
                 scaleY: 1
             });
             
-            const offsetX = Number.isFinite(mouthOffset.x) ? mouthOffset.x : 0;
-            const offsetY = Number.isFinite(mouthOffset.y) ? mouthOffset.y : 0;
-            
+            // Position mouth using the determined offsets (xCoor/yCoor take priority)
+            // Note: Anchor point (0.5, 0.5) automatically centers the image at this position
             const mouthTransform = this.applyTransform(headBaseTransform, {
-                x: offsetX,
-                y: offsetY - mouthHeight / 2,
+                x: mouthXOffset,
+                y: mouthYOffset,
                 rotation: selfRot,
                 scaleX: 1,
                 scaleY: 1
             });
             
-            // CRITICAL FIX: Look up image by ACTUAL PATH from rigData
-            const mouthImagePath = rigData.imagePaths?.mouth;
-            const mouthImage = mouthImagePath ? loadedImages[mouthImagePath] : undefined;
+            // Get current mouth shape and look up the corresponding image
+            // If currentMouthShape is specified, use it to look up the specific mouth image
+            // Otherwise, fall back to the static imagePaths.mouth
+            let mouthImagePath: string | undefined;
+            let mouthImage: any;
+            
+            const currentMouthShape = (rigData as any).currentMouthShape;
+            
+            if (currentMouthShape && (rigData as any).mouth && (rigData as any).mouth[currentMouthShape]) {
+                // Use the specific mouth shape image from rigData.mouth[shape]
+                mouthImagePath = (rigData as any).mouth[currentMouthShape];
+                mouthImage = mouthImagePath ? loadedImages[mouthImagePath] : undefined;
+            } else {
+                // Fallback to static imagePaths.mouth
+                mouthImagePath = rigData.imagePaths?.mouth;
+                mouthImage = mouthImagePath ? loadedImages[mouthImagePath] : undefined;
+            }
             
             allObjects.push({
                 name: 'mouth',
                 type: 'limb',
                 zIndex: zIndexValues['mouth'] || 1,
-                width: mouthWidth * imageScale,
-                height: mouthHeight * imageScale,
+                width: finalMouthWidth * imageScale,
+                height: finalMouthHeight * imageScale,
                 x: mouthTransform.x,
                 y: mouthTransform.y,
                 rotation: mouthTransform.rotation,

@@ -89,6 +89,29 @@ export interface EyeData {
 }
 
 /**
+ * Mouth data configuration
+ * Contains MD5 hashes for mouth shape images and positioning/sizing information
+ */
+export interface MouthData {
+    // Common positioning/sizing properties
+    width?: number;
+    height?: number;
+    size?: number;
+    xCoor?: number;
+    yCoor?: number;
+    
+    // Legacy naming
+    mouthWidth?: number;
+    mouthHeight?: number;
+    mouthSize?: number;
+    mouthXCoor?: number;
+    mouthYCoor?: number;
+    
+    // Mouth shape images (MD5 hashes) - allow any mouth shape key
+    [key: string]: string | number | undefined;
+}
+
+/**
  * Character rig data structure
  */
 export interface RigData {
@@ -103,6 +126,7 @@ export interface RigData {
     jointOffset?: Record<string, Position>;
     zIndexValues?: Record<string, number>;
     eyes?: EyeData;
+    mouth?: MouthData;
     imagePaths?: Record<string, string>;
     imageScale?: number;
     visibility?: Record<string, boolean>;

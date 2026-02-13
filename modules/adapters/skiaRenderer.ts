@@ -80,6 +80,18 @@ export class SkiaImageLoader extends ImageLoader {
             }
         }
 
+        // Collect all mouth images from rigData.mouth
+        if ((rigData as any).mouth) {
+            for (const [_mouthKey, value] of Object.entries((rigData as any).mouth)) {
+                if (typeof value === 'string' && !value.includes('[MEDIA_REMOVED]')) {
+                    // Only add if not already in list (deduplicate)
+                    if (!imagesToLoad.find(item => item.hash === value)) {
+                        imagesToLoad.push({ hash: value });
+                    }
+                }
+            }
+        }
+
         console.log(`📦 Loading ${imagesToLoad.length} images for character rig...`);
 
         const loadedImages: Record<string, any> = {};

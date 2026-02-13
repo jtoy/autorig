@@ -6,20 +6,23 @@
  * The renderRig module handles actual rendering of mouth images.
  */
 
+import type { RigData } from '../types.js';
+
 /**
- * Mouth shape types (viseme-based and general shapes)
+ * Mouth shape types - THE SINGLE SOURCE OF TRUTH
+ * Based on actual character rig mouth images
  */
 export type MouthShape = 
-  | 'closed' 
-  | 'slightly-open' 
-  | 'half-open' 
-  | 'ds' 
-  | 'open' 
-  | 'ee' 
-  | 'wide-open' 
-  | 'ah' 
-  | 'woo' 
-  | 'neutral';
+  | 'f'
+  | 'l'
+  | 'ds'
+  | 'ee'
+  | 'eh'
+  | 'open'
+  | 'closed'
+  | 'half-open'
+  | 'wide-open'
+  | 'slightly-open';
 
 /**
  * Audio analysis data structure
@@ -42,18 +45,6 @@ export interface VisemeData {
  * Mouth animation mode
  */
 export type MouthAnimationMode = 'manual' | 'audio' | 'viseme';
-
-/**
- * Mouth data configuration
- */
-export interface MouthData {
-  mouthWidth?: number;
-  mouthHeight?: number;
-  mouthSize?: number;
-  mouthXCoor?: number;
-  mouthYCoor?: number;
-  [key: string]: number | undefined;
-}
 
 /**
  * Mouth state
@@ -89,6 +80,7 @@ export class MouthSystem {
 
   /**
    * Default viseme to mouth shape mapping
+   * Maps phonemes to actual available mouth shapes
    */
   private static readonly DEFAULT_VISEME_MAPPING: Record<string, MouthShape> = {
     'X': 'closed',
@@ -97,24 +89,24 @@ export class MouthSystem {
     'C': 'half-open',
     'D': 'ds',
     'E': 'ee',
-    'F': 'half-open',
+    'F': 'f',
     'G': 'half-open',
     'H': 'slightly-open',
     'I': 'ee',
     'J': 'slightly-open',
     'K': 'half-open',
-    'L': 'slightly-open',
+    'L': 'l',
     'M': 'closed',
     'N': 'slightly-open',
-    'O': 'woo',
+    'O': 'open',
     'P': 'closed',
-    'Q': 'woo',
+    'Q': 'open',
     'R': 'slightly-open',
     'S': 'slightly-open',
     'T': 'ds',
-    'U': 'woo',
+    'U': 'open',
     'V': 'half-open',
-    'W': 'woo',
+    'W': 'wide-open',
     'Y': 'ee',
     'Z': 'slightly-open'
   };
@@ -127,9 +119,10 @@ export class MouthSystem {
     'half-open',
     'open',
     'wide-open',
-    'ah',
     'ee',
-    'woo'
+    'eh',
+    'f',
+    'l'
   ];
 
   /**
@@ -140,7 +133,7 @@ export class MouthSystem {
    */
   constructor(
     characterId: string,
-    availableMouths: Set<MouthShape> = new Set(['closed', 'neutral']),
+    availableMouths: Set<MouthShape> = new Set(['closed']),
     config: MouthConfig = {}
   ) {
     this.characterId = characterId;
@@ -154,7 +147,7 @@ export class MouthSystem {
     };
     
     this.state = {
-      currentMouthKey: 'neutral',
+      currentMouthKey: 'closed',
       lastMouthChangeTime: 0,
       currentVolume: 0,
       mode: 'manual'
@@ -182,8 +175,6 @@ export class MouthSystem {
     if (this.availableMouths.has(shape)) {
       this.state.currentMouthKey = shape;
       this.state.mode = 'manual';
-    } else {
-      console.warn(`Mouth shape "${shape}" not available for character ${this.characterId}`);
     }
   }
 
@@ -217,7 +208,7 @@ export class MouthSystem {
       // Update mouth based on volume
       if (avgVolume < (this.config.volumeThreshold ?? 10)) {
         // Low volume: close mouth
-        this.state.currentMouthKey = this.availableMouths.has('neutral') ? 'neutral' : 'closed';
+        this.state.currentMouthKey = 'closed';
       } else {
         // Speaking: change mouth shape periodically
         const timeSinceLastChange = currentTime - this.state.lastMouthChangeTime;
@@ -232,9 +223,9 @@ export class MouthSystem {
             const randomIndex = Math.floor(Math.random() * availableTalkingMouths.length);
             this.state.currentMouthKey = availableTalkingMouths[randomIndex];
           } else {
-            // Fallback: use any available mouth except neutral/closed
+            // Fallback: use any available mouth except closed
             const fallbackMouths = Array.from(this.availableMouths).filter(
-              m => m !== 'neutral' && m !== 'closed'
+              m => m !== 'closed'
             );
             if (fallbackMouths.length > 0) {
               const randomIndex = Math.floor(Math.random() * fallbackMouths.length);
@@ -246,9 +237,9 @@ export class MouthSystem {
         }
       }
     } else {
-      // No audio or paused: reset to neutral
+      // No audio or paused: reset to closed
       this.state.currentVolume = 0;
-      this.state.currentMouthKey = this.availableMouths.has('neutral') ? 'neutral' : 'closed';
+      this.state.currentMouthKey = 'closed';
     }
   }
 
@@ -266,15 +257,15 @@ export class MouthSystem {
       this.state.currentMouthKey = mappedShape;
     } else {
       // Fallback to closed if viseme not found
-      this.state.currentMouthKey = this.availableMouths.has('closed') ? 'closed' : 'neutral';
+      this.state.currentMouthKey = 'closed';
     }
   }
 
   /**
-   * Reset mouth to neutral/closed state
+   * Reset mouth to closed state
    */
   reset(): void {
-    this.state.currentMouthKey = this.availableMouths.has('neutral') ? 'neutral' : 'closed';
+    this.state.currentMouthKey = 'closed';
     this.state.currentVolume = 0;
     this.state.lastMouthChangeTime = 0;
     this.state.mode = 'manual';
@@ -287,20 +278,20 @@ export class MouthSystem {
    * @returns The image key for the current mouth (e.g., 'imagePaths.mouth_open')
    */
   getCurrentMouthImageKey(): string {
-    const currentMouth = this.state.currentMouthKey === 'neutral' ? 'closed' : this.state.currentMouthKey;
+    const currentMouth = this.state.currentMouthKey;
     
     // Map mouth shape to possible image key variations
     const keyMappings: Record<MouthShape, string[]> = {
-      'closed': ['mouth_closed', 'closed', 'neutral'],
-      'slightly-open': ['mouth_slightly_open', 'slightly-open', 'half-open'],
-      'half-open': ['mouth_half_open', 'half-open', 'slightly-open'],
-      'open': ['mouth_open', 'open'],
-      'wide-open': ['mouth_wide_open', 'wide-open'],
-      'ah': ['mouth_ah', 'ah'],
-      'ee': ['mouth_ee', 'ee'],
-      'woo': ['mouth_woo', 'woo'],
-      'ds': ['mouth_ds', 'ds'],
-      'neutral': ['mouth_closed', 'closed', 'neutral']
+      'f': ['f', 'mouth_f'],
+      'l': ['l', 'mouth_l'],
+      'ds': ['ds', 'mouth_ds'],
+      'ee': ['ee', 'mouth_ee'],
+      'eh': ['eh', 'mouth_eh'],
+      'open': ['open', 'mouth_open'],
+      'closed': ['closed', 'mouth_closed'],
+      'half-open': ['half-open', 'half_open', 'mouth_half_open'],
+      'wide-open': ['wide-open', 'wide_open', 'mouth_wide_open'],
+      'slightly-open': ['slightly-open', 'slightly_open', 'mouth_slightly_open']
     };
     
     const candidates = keyMappings[currentMouth] || [currentMouth];
@@ -314,19 +305,19 @@ export class MouthSystem {
    * Used by renderRig to try multiple image name variations
    */
   getMouthImageKeyCandidates(): string[] {
-    const currentMouth = this.state.currentMouthKey === 'neutral' ? 'closed' : this.state.currentMouthKey;
+    const currentMouth = this.state.currentMouthKey;
     
     const keyMappings: Record<MouthShape, string[]> = {
-      'closed': ['mouth_closed', 'closed', 'neutral'],
-      'slightly-open': ['mouth_slightly_open', 'slightly-open', 'half-open'],
-      'half-open': ['mouth_half_open', 'half-open', 'slightly-open'],
-      'open': ['mouth_open', 'open'],
-      'wide-open': ['mouth_wide_open', 'wide-open'],
-      'ah': ['mouth_ah', 'ah'],
-      'ee': ['mouth_ee', 'ee'],
-      'woo': ['mouth_woo', 'woo'],
-      'ds': ['mouth_ds', 'ds'],
-      'neutral': ['mouth_closed', 'closed', 'neutral']
+      'f': ['f', 'mouth_f'],
+      'l': ['l', 'mouth_l'],
+      'ds': ['ds', 'mouth_ds'],
+      'ee': ['ee', 'mouth_ee'],
+      'eh': ['eh', 'mouth_eh'],
+      'open': ['open', 'mouth_open'],
+      'closed': ['closed', 'mouth_closed'],
+      'half-open': ['half-open', 'half_open', 'mouth_half_open'],
+      'wide-open': ['wide-open', 'wide_open', 'mouth_wide_open'],
+      'slightly-open': ['slightly-open', 'slightly_open', 'mouth_slightly_open']
     };
     
     return keyMappings[currentMouth] || [currentMouth];
@@ -363,7 +354,7 @@ export class MouthSystem {
  */
 export function createMouthSystem(
   characterId: string,
-  availableMouths: MouthShape[] = ['closed', 'neutral'],
+  availableMouths: MouthShape[] = ['closed'],
   config: MouthConfig = {}
 ): MouthSystem {
   return new MouthSystem(characterId, new Set(availableMouths), config);
@@ -371,25 +362,76 @@ export function createMouthSystem(
 
 /**
  * Helper: Extract available mouth shapes from rig data
+ * Only looks for the specific mouth shapes defined in MouthShape type
  */
-export function extractMouthShapesFromRigData(rigData: any): MouthShape[] {
+export function extractMouthShapesFromRigData(rigData: RigData): MouthShape[] {
   const mouths: MouthShape[] = [];
+  
+  // THE SINGLE SOURCE OF TRUTH for all mouth types
   const mouthTypes: MouthShape[] = [
-    'closed', 'slightly-open', 'half-open', 'ds', 'open', 'ee', 'wide-open', 'ah', 'woo', 'neutral'
+    'f', 'l', 'ds', 'ee', 'eh', 'open', 'closed', 'half-open', 'wide-open', 'slightly-open'
   ];
   
-  if (rigData.imagePaths) {
-    for (const mouthType of mouthTypes) {
-      if (rigData.imagePaths[mouthType] || rigData.imagePaths[`mouth_${mouthType}`]) {
-        mouths.push(mouthType);
-      }
+  // Check if mouth data exists
+  if (!rigData.mouth) {
+    return ['closed'];
+  }
+  
+  const mouthData = rigData.mouth;
+  
+  // Check each mouth type from our absolute list
+  for (const mouthType of mouthTypes) {
+    // Check if this exact mouth shape exists in the data
+    const value = mouthData[mouthType];
+    
+    // Check if value exists and is valid (not undefined, not null, not [MEDIA_REMOVED])
+    if (value && 
+        typeof value === 'string' && 
+        value !== '' && 
+        !value.includes('[MEDIA_REMOVED]')) {
+      mouths.push(mouthType);
     }
   }
   
-  // Always include at least closed/neutral as fallback
+  // Always include at least closed as fallback
   if (mouths.length === 0) {
-    mouths.push('closed', 'neutral');
+    mouths.push('closed');
   }
   
   return mouths;
+}
+
+/**
+ * Helper: Extract mouth image hashes from rig data
+ * Returns only the valid mouth shape MD5 hashes, excluding positioning data
+ * @param rigData - Character rig data
+ * @returns Object with mouth shape names as keys and MD5 hashes as values
+ */
+export function extractMouthImagesFromRigData(rigData: RigData): Record<MouthShape, string> {
+  const mouthImages: Partial<Record<MouthShape, string>> = {};
+  
+  // THE SINGLE SOURCE OF TRUTH for all mouth types
+  const mouthTypes: MouthShape[] = [
+    'f', 'l', 'ds', 'ee', 'eh', 'open', 'closed', 'half-open', 'wide-open', 'slightly-open'
+  ];
+  
+  if (!rigData.mouth) {
+    return mouthImages as Record<MouthShape, string>;
+  }
+  
+  const mouthData = rigData.mouth;
+  
+  // Extract only the mouth shape image hashes
+  for (const mouthType of mouthTypes) {
+    const value = mouthData[mouthType];
+    
+    if (value && 
+        typeof value === 'string' && 
+        value !== '' && 
+        !value.includes('[MEDIA_REMOVED]')) {
+      mouthImages[mouthType] = value;
+    }
+  }
+  
+  return mouthImages as Record<MouthShape, string>;
 }

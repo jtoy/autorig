@@ -283,6 +283,24 @@ export class ImageLoader {
             }
         }
         
+        // Collect all mouth images from rigData.mouth
+        if ((rigData as any).mouth) {
+            for (const [_mouthKey, value] of Object.entries((rigData as any).mouth)) {
+                if (typeof value === 'string' && !value.includes('[MEDIA_REMOVED]')) {
+                    const hash = value;
+                    
+                    // Check if this actual path is already cached
+                    const alreadyCached = this.imageCache.get(hash);
+                    if (!useCache || !alreadyCached) {
+                        // Not cached - need to load it (but only add once per unique hash)
+                        if (!imagesToLoad.find(item => item.hash === hash)) {
+                            imagesToLoad.push({ hash });
+                        }
+                    }
+                }
+            }
+        }
+        
         console.log(`📦 Loading ${imagesToLoad.length} images for character rig...`);
         
         let loaded = 0;
