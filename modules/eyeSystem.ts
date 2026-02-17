@@ -114,9 +114,10 @@ export class EyeSystem {
      * @param currentTime - Current time in seconds
      */
     updateBlinking(currentTime: number): void {
-        // Initialize blink timing if needed
+        // Initialize blink timing if needed: treat "last blink" as nextBlinkOffset ago
+        // so the first blink happens after (eyeLidUpdateInterval - nextBlinkOffset) ≈ 2.5–5 s, with stagger 0–0.5 s
         if (this.state.eyeLidLastUpdatedTime === null) {
-            this.state.eyeLidLastUpdatedTime = currentTime - this.state.eyeLidUpdateInterval + this.state.nextBlinkOffset;
+            this.state.eyeLidLastUpdatedTime = currentTime - this.state.nextBlinkOffset;
         }
 
         const timeSinceBlink = currentTime - this.state.eyeLidLastUpdatedTime;
@@ -354,6 +355,17 @@ export class EyeSystem {
         this.state.currentEyeLidCount = 1;
         this.state.currentEyeLidState = 'closed';
         this.state.eyeLidLastUpdatedTime = Date.now() / 1000; // Use current time
+    }
+
+    /**
+     * Force blink at a specific timeline time (for timeline-driven "eye blink" actions).
+     * Use this when playback is driven by timeline currentTime so the blink animation
+     * progresses correctly in sync with the timeline.
+     */
+    forceBlinkAtTime(timelineTime: number): void {
+        this.state.currentEyeLidCount = 1;
+        this.state.currentEyeLidState = 'half-closed';
+        this.state.eyeLidLastUpdatedTime = timelineTime;
     }
 
     /**

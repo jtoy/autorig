@@ -84,31 +84,14 @@ export class MouthSystem {
    */
   private static readonly DEFAULT_VISEME_MAPPING: Record<string, MouthShape> = {
     'X': 'closed',
-    'A': 'open',
-    'B': 'closed',
-    'C': 'half-open',
-    'D': 'ds',
-    'E': 'ee',
-    'F': 'f',
-    'G': 'half-open',
-    'H': 'slightly-open',
-    'I': 'ee',
-    'J': 'slightly-open',
-    'K': 'half-open',
-    'L': 'l',
-    'M': 'closed',
-    'N': 'slightly-open',
-    'O': 'open',
-    'P': 'closed',
-    'Q': 'open',
-    'R': 'slightly-open',
-    'S': 'slightly-open',
-    'T': 'ds',
-    'U': 'open',
-    'V': 'half-open',
-    'W': 'wide-open',
-    'Y': 'ee',
-    'Z': 'slightly-open'
+    'A': 'closed',
+    'B': 'ee',
+    'C': 'eh',
+    'D': 'half-open',
+    'E': 'slightly-open',
+    'F': 'wide-open',
+    'G': 'f',
+    'H': 'l'
   };
 
   /**
@@ -273,54 +256,12 @@ export class MouthSystem {
 
   /**
    * Get the image key for the current mouth shape
-   * This is used by renderRig to determine which image to render
+   * Mouth shapes are named absolutely (no variations)
    * 
-   * @returns The image key for the current mouth (e.g., 'imagePaths.mouth_open')
+   * @returns The image key for the current mouth (e.g., 'open', 'closed', 'f')
    */
   getCurrentMouthImageKey(): string {
-    const currentMouth = this.state.currentMouthKey;
-    
-    // Map mouth shape to possible image key variations
-    const keyMappings: Record<MouthShape, string[]> = {
-      'f': ['f', 'mouth_f'],
-      'l': ['l', 'mouth_l'],
-      'ds': ['ds', 'mouth_ds'],
-      'ee': ['ee', 'mouth_ee'],
-      'eh': ['eh', 'mouth_eh'],
-      'open': ['open', 'mouth_open'],
-      'closed': ['closed', 'mouth_closed'],
-      'half-open': ['half-open', 'half_open', 'mouth_half_open'],
-      'wide-open': ['wide-open', 'wide_open', 'mouth_wide_open'],
-      'slightly-open': ['slightly-open', 'slightly_open', 'mouth_slightly_open']
-    };
-    
-    const candidates = keyMappings[currentMouth] || [currentMouth];
-    
-    // Return the first candidate (renderRig will try all variants)
-    return candidates[0];
-  }
-
-  /**
-   * Get all possible image key candidates for current mouth
-   * Used by renderRig to try multiple image name variations
-   */
-  getMouthImageKeyCandidates(): string[] {
-    const currentMouth = this.state.currentMouthKey;
-    
-    const keyMappings: Record<MouthShape, string[]> = {
-      'f': ['f', 'mouth_f'],
-      'l': ['l', 'mouth_l'],
-      'ds': ['ds', 'mouth_ds'],
-      'ee': ['ee', 'mouth_ee'],
-      'eh': ['eh', 'mouth_eh'],
-      'open': ['open', 'mouth_open'],
-      'closed': ['closed', 'mouth_closed'],
-      'half-open': ['half-open', 'half_open', 'mouth_half_open'],
-      'wide-open': ['wide-open', 'wide_open', 'mouth_wide_open'],
-      'slightly-open': ['slightly-open', 'slightly_open', 'mouth_slightly_open']
-    };
-    
-    return keyMappings[currentMouth] || [currentMouth];
+    return this.state.currentMouthKey;
   }
 
   /**
