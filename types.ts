@@ -112,6 +112,19 @@ export interface MouthData {
 }
 
 /**
+ * Eye socket polygon - array of points defining the boundary
+ */
+export type EyeSocketPolygon = Position[];
+
+/**
+ * Eye sockets for left and right eyes (used to compute iris movement bounds)
+ */
+export interface EyeSockets {
+    left?: EyeSocketPolygon;
+    right?: EyeSocketPolygon;
+}
+
+/**
  * Character rig data structure
  */
 export interface RigData {
@@ -126,6 +139,7 @@ export interface RigData {
     jointOffset?: Record<string, Position>;
     zIndexValues?: Record<string, number>;
     eyes?: EyeData;
+    eyeSockets?: EyeSockets;
     mouth?: MouthData;
     imagePaths?: Record<string, string>;
     imageScale?: number;

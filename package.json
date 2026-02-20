@@ -1,6 +1,6 @@
 {
   "name": "distark-render",
-  "version": "1.0.3",
+  "version": "1.0.6",
   "description": "Rendering-agnostic character rig system with TypeScript",
   "type": "module",
   "main": "./dist/modules/renderRig.js",
@@ -33,6 +33,10 @@
     "./skia": {
       "types": "./dist/modules/adapters/skiaRenderer.d.ts",
       "import": "./dist/modules/adapters/skiaRenderer.js"
+    },
+    "./animationDiff": {
+      "types": "./dist/modules/animationDiff.d.ts",
+      "import": "./dist/modules/animationDiff.js"
     }
   },
   "files": [
@@ -46,10 +50,12 @@
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
-    "test": "npm run build && node dist/tests/test-visual-verification.js && node dist/tests/test-joint-movement.js",
+    "test": "npm run build && node dist/tests/test-animation-diff.js && node dist/tests/test-animation-diff-rendering.js && node dist/tests/test-visual-verification.js && node dist/tests/test-joint-movement.js",
     "test-skia": "npm run build && node dist/tests/test-skia.js",
     "test-visual": "npm run build && node dist/tests/test-visual-verification.js",
     "test-joints": "npm run build && node dist/tests/test-joint-movement.js",
+    "test-diff": "npm run build && node dist/tests/test-animation-diff.js",
+    "test-diff-render": "npm run build && node dist/tests/test-animation-diff-rendering.js",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
