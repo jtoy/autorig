@@ -151,4 +151,8 @@ const renderer = new CharacterRigRenderer(imageLoader?: ImageLoader);
 await renderer.render(canvas, rigData, loadedImages?, cameraOffset?, showPivotPoints?);
 ```
 
+### In action
+https://studyturtle.com
+https://www.youtube.com/@studyturtlehq
+
 

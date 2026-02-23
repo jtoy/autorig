@@ -27,7 +27,8 @@
   "include": [
     "types.ts",
     "modules/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "cli/**/*.ts"
   ],
   "exclude": [
     "node_modules",
