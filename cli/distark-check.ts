@@ -16,6 +16,7 @@ import { runAnimate } from './animate.js';
 import { runDiff } from './diff.js';
 import { runQuery } from './query.js';
 import { runRecord } from './record.js';
+import { runTest } from './test.js';
 
 const USAGE = `distark-check - CLI tool for LLM-driven rig testing
 
@@ -25,10 +26,11 @@ Commands:
   animate  <rig.json> <animation.json> [-o frames/] [--width N] [--height N]
   diff     <before.png> <after.png> [-o diff.png] [--threshold N]
   query    <image.png|rig.json> --prompt "..." [-o report.json]
+  test     <rig.json|image|video> --prompt "..." [--tries N] [-o report.json]
   record   <world.json> [--orc https://orchestrator.distark.com] [-o out.mp4] [--timeout 300]
 
 Environment:
-  GEMINI_API_KEY    Required for 'query' command
+  GEMINI_API_KEY    Required for 'query' and 'test' commands
   ORC_URL           Orchestrator URL for 'record' command (default: http://localhost:3000)
 `;
 
@@ -55,6 +57,9 @@ async function main(): Promise<void> {
             break;
         case 'record':
             await runRecord(commandArgs);
+            break;
+        case 'test':
+            await runTest(commandArgs);
             break;
         default:
             console.log(USAGE);
