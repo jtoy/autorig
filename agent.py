@@ -11,6 +11,7 @@ from google import genai
 from processing import diecut
 from processing import bboxes
 from processing import change_background, change_alpha
+from processing import rig
 from processing.simple_background import remove_background_simple
 from processing.genai_background import remove_background_genai
 
@@ -79,6 +80,30 @@ class RemoveBackgroundTool(BaseTool):
             return f"Error running removeBackground: {str(e)}"
 
 
+class RigInput(BaseModel):
+    original_image_path: str = Field(description="Path to the original character image")
+    pieces_dir: str = Field(description="Folder with PNG body parts (output from bboxes + background removal)")
+    output_path: str = Field(default="rig.json", description="Output path for the rig JSON file")
+
+class RigTool(BaseTool):
+    name: str = "rig"
+    description: str = (
+        "Generate a distark-compatible rig JSON from die-cut body parts. "
+        "Uses Gemini to detect joint positions on the torso and limb images, "
+        "then assembles a complete rig with pivot points, dimensions, rotations, and z-ordering. "
+        "Automatically validates the output with distark-check verify if installed. "
+        "Input: original_image_path, pieces_dir. Output: rig JSON saved to output_path."
+    )
+    args_schema: Type[BaseModel] = RigInput
+
+    def _run(self, original_image_path: str, pieces_dir: str, output_path: str = "rig.json"):
+        try:
+            rig(client, original_image_path, pieces_dir, output_path)
+            return f"Rig JSON saved successfully to {output_path}"
+        except Exception as e:
+            return f"Error running rig: {str(e)}"
+
+
 def removeBackground(pieces_dir: str, use_genai: bool = True, tolerance: int = 30):
     if not os.path.isdir(pieces_dir):
         raise FileNotFoundError(f"Parts folder not found: {pieces_dir}")
@@ -102,17 +127,18 @@ def agenticDiecut(image_path: str, diecut_output: str, pieces_dir: str):
         convert_system_message_to_human=True
     )
 
-    tools = [DiecutTool(), BboxesTool(), RemoveBackgroundTool()]
+    tools = [DiecutTool(), BboxesTool(), RemoveBackgroundTool(), RigTool()]
 
     agent = create_agent(
         model=llm,
         tools=tools,
         system_prompt=(
-            "You are an animator artist specializing in character die-cutting. "
+            "You are an animator artist specializing in character die-cutting and rigging. "
             "You must execute the following steps SEQUENTIALLY. Wait for each tool to finish before calling the next: "
             "1. Call 'diecut' to create the composite image. "
             "2. AFTER 'diecut' succeeds, call 'bboxes' to extract the pieces into a folder. "
             "3. AFTER 'bboxes' succeeds, call 'remove_background' on that folder to clean the pieces. "
+            "4. AFTER 'remove_background' succeeds, call 'rig' to generate a rig JSON from the cleaned parts. "
             "DO NOT call these tools in parallel in the same turn, as each depends on the previous one's output."
         ),
         debug=True
@@ -122,7 +148,8 @@ def agenticDiecut(image_path: str, diecut_output: str, pieces_dir: str):
         f"Take the image '{image_path}', first apply diecut saving it as "
         f"'{diecut_output}', then extract the pieces from that result into the "
         f"folder '{pieces_dir}', then remove the background from all pieces in "
-        f"that folder."
+        f"that folder, then generate a rig JSON from the cleaned parts using "
+        f"the original image '{image_path}' and pieces folder '{pieces_dir}'."
     )
 
     print(f"Running task: {task}")
