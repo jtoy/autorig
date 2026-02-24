@@ -1,6 +1,6 @@
 {
   "name": "distark-render",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Rendering-agnostic character rig system with TypeScript",
   "type": "module",
   "main": "./dist/modules/renderRig.js",
