@@ -55,13 +55,7 @@
     "dev": "tsc --watch & http-server -p 8080",
     "clean": "rm -rf dist",
     "serve": "http-server -p 8080",
-    "test": "npm run build && node dist/tests/test-animation-diff.js && node dist/tests/test-animation-diff-rendering.js && node dist/tests/test-visual-verification.js && node dist/tests/test-joint-movement.js",
-    "test-autofit": "npm run build && node dist/tests/test-autofit.js",
-    "test-skia": "npm run build && node dist/tests/test-skia.js",
-    "test-visual": "npm run build && node dist/tests/test-visual-verification.js",
-    "test-joints": "npm run build && node dist/tests/test-joint-movement.js",
-    "test-diff": "npm run build && node dist/tests/test-animation-diff.js",
-    "test-diff-render": "npm run build && node dist/tests/test-animation-diff-rendering.js",
+    "test": "npm run build && for f in dist/tests/test-*.js; do echo \"\\n>>> $f\" && node \"$f\" || exit 1; done",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

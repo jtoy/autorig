@@ -95,7 +95,7 @@ async function testRenderWithReport(): Promise<TestResult> {
 
 async function testRenderCustomDimensions(): Promise<TestResult> {
     const out = join(TEST_DIR, 'render-custom-dim.png');
-    const result = run(`${CLI} render ${TANK} -o ${out} --width 500 --height 500`);
+    const result = run(`${CLI} render ${TANK} -o ${out} --width 500 --height 500 --no-autofit`);
 
     if (result.exitCode !== 0) {
         return { name: 'render: custom dimensions', passed: false, detail: result.stderr };

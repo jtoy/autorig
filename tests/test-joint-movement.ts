@@ -412,7 +412,7 @@ async function runJointMovementTests(inputFile: string): Promise<boolean> {
 
 // Run test
 async function main() {
-    const inputFile = process.argv[2] || 'tank.json';
+    const inputFile = process.argv[2] || 'assets/tank.json';
     
     try {
         const success = await runJointMovementTests(inputFile);
