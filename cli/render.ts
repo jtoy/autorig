@@ -2,7 +2,7 @@
  * render command - Render a rig JSON to PNG and output a structured JSON report
  *
  * Usage:
- *   distark-check render <rig.json> [-o output.png] [--width 1000] [--height 1000] [--report]
+ *   distark-check render <rig.json> [-o output.png] [--width 1000] [--height 1000] [--report] [--no-autofit]
  */
 
 import { SkiaRenderer } from '../modules/adapters/skiaRenderer.js';
@@ -77,6 +77,7 @@ export async function runRender(args: string[]): Promise<void> {
     const width = parseInt(args[args.indexOf('--width') + 1]) || 1000;
     const height = parseInt(args[args.indexOf('--height') + 1]) || 1000;
     const wantReport = args.includes('--report');
+    const autoFit = !args.includes('--no-autofit');
 
     const rigData: RigData = JSON.parse(await readFile(inputFile, 'utf-8'));
 
@@ -87,21 +88,40 @@ export async function runRender(args: string[]): Promise<void> {
     const renderer = new SkiaRenderer();
     await renderer.loadImages(rigData);
 
-    // Render to file
-    await renderer.renderToFile(outputFile, rigData, {
-        canvasWidth: width,
-        canvasHeight: height,
-        showPivots: false,
-    });
+    let finalWidth = width;
+    let finalHeight = height;
+
+    if (autoFit) {
+        const fit = renderer.computeAutoFit(rigData, { canvasWidth: width, canvasHeight: height });
+        finalWidth = fit.canvasWidth;
+        finalHeight = fit.canvasHeight;
+
+        // Render with auto-fit dimensions
+        await renderer.renderToFile(outputFile, rigData, {
+            canvasWidth: width,
+            canvasHeight: height,
+            autoFit: true,
+            showPivots: false,
+        });
+    } else {
+        await renderer.renderToFile(outputFile, rigData, {
+            canvasWidth: width,
+            canvasHeight: height,
+            autoFit: false,
+            showPivots: false,
+        });
+    }
 
     // Restore console.log
     console.log = origLog;
 
-    console.error(`Rendered: ${outputFile}`);
+    console.error(`Rendered: ${outputFile} (${finalWidth}x${finalHeight}${autoFit ? ' autoFit' : ''})`);
 
-    // Compute report data
-    const renderData = renderer.compute(rigData, { canvasWidth: width, canvasHeight: height });
-    const report = buildReport(inputFile, outputFile, width, height, renderData);
+    // Compute report data using the final dimensions
+    const renderData = autoFit
+        ? renderer.computeAutoFit(rigData, { canvasWidth: width, canvasHeight: height }).renderData
+        : renderer.compute(rigData, { canvasWidth: finalWidth, canvasHeight: finalHeight });
+    const report = buildReport(inputFile, outputFile, finalWidth, finalHeight, renderData);
 
     if (wantReport) {
         const reportFile = outputFile.replace(/\.png$/, '.report.json');

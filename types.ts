@@ -156,6 +156,8 @@ export interface RenderOptions {
     canvasHeight?: number;
     cameraOffset?: Position;
     loadedImages?: Record<string, HTMLImageElement | HTMLCanvasElement>;
+    /** When true, auto-size canvas so the entire character fits with padding (default: true) */
+    autoFit?: boolean;
 }
 
 /**
