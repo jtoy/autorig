@@ -137,6 +137,7 @@ Return JSON with exactly these 4 keys: "dimensionValues", "pivotPoints", "jointO
 Include all 10 parts: head, torso, leftUpperArm, rightUpperArm, leftForearm, rightForearm, leftThigh, rightThigh, leftLeg, rightLeg.
 Include all 9 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUpperArm, torso_leftThigh, torso_rightThigh, leftUpperArm_leftForearm, rightUpperArm_rightForearm, leftThigh_leftLeg, rightThigh_rightLeg."""
 
+    print(f"[rig] Generating rig params with gemini-2.5-flash for {ow}x{oh}px image...")
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=[original, prompt],
@@ -145,7 +146,10 @@ Include all 9 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUp
             temperature=0,
         )
     )
-    return _parse_json(response.text)
+    result = _parse_json(response.text)
+    print(f"[rig] Got params: {len(result.get('dimensionValues', {}))} dimensions, "
+          f"{len(result.get('pivotPoints', {}))} pivots")
+    return result
 
 
 def rig(client, original_image_path, parts_dir, output_path):

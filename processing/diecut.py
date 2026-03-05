@@ -1,9 +1,33 @@
 import io
+import json
 import os
 from google.genai import types
 from PIL import Image
 
-def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
+
+JUDGE_CRITERIA = [
+    ("part_count",
+     "Are there exactly 10 separate body parts visible in the diecut image? "
+     "Count each distinct piece carefully. The expected parts are: head, torso, "
+     "right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, "
+     "left_thigh, right_calf, left_calf."),
+    ("segmentation",
+     "Are the arms properly split into upper arms and forearms as separate pieces? "
+     "Are the legs properly split into thighs and calves as separate pieces? "
+     "Each limb must be two distinct parts, not one combined piece."),
+    ("style_fidelity",
+     "Does the diecut preserve the original art style, line weights, colors, "
+     "and proportions? Is it a faithful extraction from the original rather than "
+     "a redrawn or vectorized version?"),
+    ("detail_preservation",
+     "Are hands, facial features, and small details unchanged from the original image? "
+     "No added fingers, redrawn features, or modified details?"),
+    ("layout",
+     "Are all parts arranged horizontally in a row with clear spacing between them, "
+     "not overlapping each other?"),
+]
+
+def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: int = 5):
     """
     Performs character die-cutting for animation using Gemini.
     Separates head, torso, arms, hands, legs, and feet into a single image.
@@ -50,45 +74,62 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
                 return part.inline_data.data, (part.inline_data.mime_type or "image/png")
         return None, None
 
-    def review_image(original_bytes, generated_bytes, generated_mime):
-        verifier_model = "gemini-3-pro-preview"
-        verify_prompt = """
-        Compare the ORIGINAL image with the DIECUT result.
-        Reject if there are any style changes, finger/detail modifications, pose/layout changes,
-        missing/extra parts, or labels. Reply with 'REJECTED' and a brief reason if any issue exists.
-        Reply with 'APPROVED' only if it is a faithful extraction.
-        The diecut parts must be placed along the horizontal axis with some spacing in between, as shown in the example:
-        head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
-        MUST be 10 EXACTLY.
+    def judge_image(original_bytes, generated_bytes, generated_mime):
+        """Score a diecut attempt across multiple binary criteria.
 
-        Write the things to correct as a bulleted list. Like this:
-        Things to correct:
-        - Reason 1
-        - Reason 2
-        
-        
-        Image 1 example. Image 2 example diecut. Image 3 is the image to diecut. Image 4 is the DIECUT to verify.
+        Returns (scores_dict, total_score, feedback_str) where scores_dict
+        maps criterion name to {"pass": bool, "reason": str}.
         """
+        judge_model = "gemini-3-flash-preview"
+        example_input_bytes = pil_to_bytes(example_input)
+        example_output_bytes = pil_to_bytes(example_output)
 
-        verify_response = client.models.generate_content(
-            model=verifier_model,
-            contents=[
-                types.Part.from_bytes(data=pil_to_bytes(example_input), mime_type="image/png"),
-                types.Part.from_text(text="EXAMPLE OF CHARACTER INPUT"),
-                types.Part.from_bytes(data=pil_to_bytes(example_output), mime_type="image/png"),
-                types.Part.from_text(text="EXAMPLE OF A GOOD DIECUT"),
-                types.Part.from_text(text=verify_prompt),
-                types.Part.from_text(text="ORIGINAL"),
-                types.Part.from_bytes(data=original_bytes, mime_type="image/png"),
-                types.Part.from_text(text="DIECUT"),
-                types.Part.from_bytes(data=generated_bytes, mime_type=generated_mime or "image/png"),
-            ],
-            config=types.GenerateContentConfig(temperature=0),
-        )
+        scores = {}
+        for i, (name, criterion_prompt) in enumerate(JUDGE_CRITERIA, 1):
+            prompt_text = (
+                "You are judging a character diecut result. "
+                "Image 1 is an example character. Image 2 is an example of a good diecut. "
+                "Image 3 is the ORIGINAL character. Image 4 is the DIECUT to judge.\n\n"
+                f"Criterion: {criterion_prompt}\n\n"
+                'Respond with JSON: {"pass": true or false, "reason": "brief explanation"}'
+            )
+            try:
+                print(f"[judge] Checking {i}/{len(JUDGE_CRITERIA)}: {name}...")
+                resp = client.models.generate_content(
+                    model=judge_model,
+                    contents=[
+                        types.Part.from_bytes(data=example_input_bytes, mime_type="image/png"),
+                        types.Part.from_text(text="EXAMPLE CHARACTER"),
+                        types.Part.from_bytes(data=example_output_bytes, mime_type="image/png"),
+                        types.Part.from_text(text="EXAMPLE GOOD DIECUT"),
+                        types.Part.from_bytes(data=original_bytes, mime_type="image/png"),
+                        types.Part.from_text(text="ORIGINAL CHARACTER"),
+                        types.Part.from_bytes(data=generated_bytes, mime_type=generated_mime or "image/png"),
+                        types.Part.from_text(text="DIECUT TO JUDGE"),
+                        types.Part.from_text(text=prompt_text),
+                    ],
+                    config=types.GenerateContentConfig(
+                        temperature=0,
+                        response_mime_type="application/json",
+                    ),
+                )
+                result = json.loads(resp.text.strip())
+                scores[name] = {
+                    "pass": bool(result.get("pass", False)),
+                    "reason": result.get("reason", ""),
+                }
+            except Exception as e:
+                scores[name] = {"pass": False, "reason": f"Judge error: {e}"}
 
-        feedback = verify_response.text.strip()
-        approved = "APPROVED" in feedback.upper() and "REJECTED" not in feedback.upper()
-        return feedback, approved
+        total = sum(1 for s in scores.values() if s["pass"])
+        parts = [
+            f"{name}:{'PASS' if s['pass'] else 'FAIL'}"
+            for name, s in scores.items()
+        ]
+        feedback = f"{total}/5 — " + " | ".join(parts)
+        return scores, total, feedback
+
+    print(f"[diecut] Starting with model={model}, rounds={rounds}, image={imagePath}")
 
     chat = client.chats.create(
         model=model,
@@ -102,12 +143,15 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         ),
     )
 
-    round_prompts = 5
+    round_prompts = max(1, rounds)
     generated_bytes = None
     generated_mime = None
     last_feedback = None
+    attempts = []  # [(score, feedback, image_bytes, mime)]
+
     for round_index in range(1, round_prompts + 1):
         if round_index == 1:
+            print(f"[diecut] Round {round_index}/{round_prompts}: generating diecut with {model}...")
             message_parts = [
                 types.Part.from_text(text=prompt),
                 types.Part.from_text(text="Example Input"),
@@ -120,6 +164,7 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         else:
             if generated_bytes is None:
                 raise ValueError("No generated image returned from previous round.")
+            print(f"[diecut] Round {round_index}/{round_prompts}: retrying with feedback...")
             message_parts = [
                 types.Part.from_text(text=last_feedback),
             ]
@@ -128,22 +173,41 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False):
         generated_bytes, generated_mime = extract_inline_image(response.parts)
         if generated_bytes is None:
             raise ValueError("No image returned by model.")
+        print(f"[diecut] Round {round_index}: got image, running judge (gemini-3-flash-preview)...")
 
-        feedback, approved = review_image(pil_to_bytes(image), generated_bytes, generated_mime)
-        print(f"Verification Result (round {round_index}): {feedback}")
-        last_feedback = None if approved else feedback
+        scores, total, feedback = judge_image(
+            pil_to_bytes(image), generated_bytes, generated_mime
+        )
+        attempts.append((total, feedback, generated_bytes, generated_mime))
+        print(f"[diecut] Judge (round {round_index}): {feedback}")
 
-        if round_index == round_prompts and not approved:
-            if fail_on_review:
-                print("Final review failed; saving output and raising error per fail_on_review=True.")
-            else:
-                print("Final review failed; saving output without raising.")
+        if total == 5:
+            print(f"Round {round_index} passed all criteria!")
+            break
 
-    if generated_bytes is None:
-        raise ValueError("No final image bytes available for saving.")
+        # Build targeted feedback from only failed criteria
+        failed_reasons = [
+            f"- {s['reason']}" for s in scores.values() if not s["pass"]
+        ]
+        last_feedback = "Fix these issues:\n" + "\n".join(failed_reasons)
 
-    output_image = Image.open(io.BytesIO(generated_bytes))
+    # Select the best attempt (highest score; ties broken by earliest round)
+    best = max(attempts, key=lambda a: a[0])
+    best_score = best[0]
+    best_bytes = best[2]
+    best_round = attempts.index(best) + 1
+
+    if best_score == 5:
+        print(f"[diecut] Perfect score in round {best_round}!")
+    else:
+        print(f"[diecut] Best: round {best_round} ({best_score}/5 across {len(attempts)} attempt(s))")
+        if fail_on_review:
+            print("[diecut] fail_on_review=True, will raise after saving.")
+
+    output_image = Image.open(io.BytesIO(best_bytes))
     output_image.save(outputPath)
 
-    if last_feedback and fail_on_review:
-        raise ValueError(f"Visual verification failed: {last_feedback}")
+    if best_score < 5 and fail_on_review:
+        raise ValueError(
+            f"Visual verification failed (best: {best_score}/5): {best[1]}"
+        )

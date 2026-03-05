@@ -46,6 +46,7 @@ def bboxes(client, inputPath, outputFolder):
     image = Image.open(inputPath)
     width, height = image.size
 
+    print(f"[bboxes] Detecting 10 body part bounding boxes with {model}...")
     response = client.models.generate_content(
         model=model,
         contents=[image, prompt],
@@ -57,6 +58,7 @@ def bboxes(client, inputPath, outputFolder):
 
     bounding_boxes = json.loads(response.text)
     items = bounding_boxes if isinstance(bounding_boxes, list) else bounding_boxes.get("items", [])
+    print(f"[bboxes] Got {len(items)} bounding boxes")
 
     os.makedirs(outputFolder, exist_ok=True)
 
