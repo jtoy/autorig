@@ -34,7 +34,7 @@ export async function runRecord(args: string[]): Promise<void> {
     }
 
     const orcIdx = args.indexOf('--orc');
-    const orcBase = orcIdx !== -1 ? args[orcIdx + 1] : (process.env.ORC_URL || 'https://orchestrator.distark.com');
+    const orcBase = orcIdx !== -1 ? args[orcIdx + 1] : (process.env.ORC_URL || 'http://localhost:3000');
     const outIdx = args.indexOf('-o');
     const outputFile = outIdx !== -1 ? args[outIdx + 1] : inputFile.replace(/\.json$/, '.mp4');
     const timeoutIdx = args.indexOf('--timeout');

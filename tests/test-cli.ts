@@ -253,6 +253,86 @@ async function testDiffOutputFile(): Promise<TestResult> {
     return { name: 'diff: output file created', passed: true };
 }
 
+// ─── ANIMATE TESTS ───
+
+async function testAnimateWithPreset(): Promise<TestResult> {
+    const outDir = join(TEST_DIR, 'animate-preset');
+    const result = run(`${CLI} animate ${TANK} jumping-jack -o ${outDir} --width 500 --height 500`);
+
+    if (result.exitCode !== 0) {
+        return { name: 'animate: preset name', passed: false, detail: `Exit code ${result.exitCode}: ${result.stderr}` };
+    }
+
+    // Should produce frame PNGs
+    const frame0 = await fileExists(join(outDir, '000.png'));
+    if (!frame0) {
+        return { name: 'animate: preset name', passed: false, detail: 'Frame 000.png not created' };
+    }
+
+    // Should produce manifest
+    const manifestExists = await fileExists(join(outDir, 'manifest.json'));
+    if (!manifestExists) {
+        return { name: 'animate: preset name', passed: false, detail: 'manifest.json not created' };
+    }
+
+    // Manifest should be valid JSON with correct fields
+    const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf-8'));
+    if (manifest.frame_count !== 24) {
+        return { name: 'animate: preset name', passed: false, detail: `Expected 24 frames, got ${manifest.frame_count}` };
+    }
+    if (!manifest.animation_input.includes('jumping-jack.json')) {
+        return { name: 'animate: preset name', passed: false, detail: `Resolved path missing jumping-jack.json: ${manifest.animation_input}` };
+    }
+
+    return { name: 'animate: preset name', passed: true };
+}
+
+async function testAnimateWithJsonFile(): Promise<TestResult> {
+    // Write a tiny 2-frame animation file
+    const animFile = join(TEST_DIR, 'test-anim.json');
+    const animData = [
+        { rotationValues: { head: 0 } },
+        { rotationValues: { head: 0.3 } },
+    ];
+    const { writeFile: wf } = await import('fs/promises');
+    await wf(animFile, JSON.stringify(animData));
+
+    const outDir = join(TEST_DIR, 'animate-json');
+    const result = run(`${CLI} animate ${TANK} ${animFile} -o ${outDir} --width 500 --height 500`);
+
+    if (result.exitCode !== 0) {
+        return { name: 'animate: json file', passed: false, detail: `Exit code ${result.exitCode}: ${result.stderr}` };
+    }
+
+    const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf-8'));
+    if (manifest.frame_count !== 2) {
+        return { name: 'animate: json file', passed: false, detail: `Expected 2 frames, got ${manifest.frame_count}` };
+    }
+
+    return { name: 'animate: json file', passed: true };
+}
+
+async function testAnimateBadPreset(): Promise<TestResult> {
+    const outDir = join(TEST_DIR, 'animate-bad');
+    const result = run(`${CLI} animate ${TANK} nonexistent-preset -o ${outDir}`);
+
+    if (result.exitCode === 0) {
+        return { name: 'animate: bad preset fails', passed: false, detail: 'Should have exited non-zero' };
+    }
+
+    return { name: 'animate: bad preset fails', passed: true };
+}
+
+async function testAnimateMissingArgs(): Promise<TestResult> {
+    const result = run(`${CLI} animate`);
+
+    if (result.exitCode === 0) {
+        return { name: 'animate: missing args fails', passed: false, detail: 'Should have exited non-zero' };
+    }
+
+    return { name: 'animate: missing args fails', passed: true };
+}
+
 // ─── QUERY TESTS (structural only, no API call) ───
 
 async function testQueryMissingKey(): Promise<TestResult> {
@@ -338,6 +418,11 @@ async function main() {
         testDiffIdentical,
         testDiffDifferent,
         testDiffOutputFile,
+        // Animate
+        testAnimateWithPreset,
+        testAnimateWithJsonFile,
+        testAnimateBadPreset,
+        testAnimateMissingArgs,
         // Query (structural)
         testQueryMissingKey,
         testQueryMissingPrompt,

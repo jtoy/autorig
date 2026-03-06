@@ -27,7 +27,7 @@ Commands:
   diff     <before.png> <after.png> [-o diff.png] [--threshold N]
   query    <image.png|rig.json> --prompt "..." [-o report.json]
   test     <rig.json|image|video> --prompt "..." [--tries N] [-o report.json]
-  record   <world.json> [--orc https://orchestrator.distark.com] [-o out.mp4] [--timeout 300]
+  record   <world.json> [--orc URL] [-o out.mp4] [--timeout 300]
 
 Environment:
   GEMINI_API_KEY    Required for 'query' and 'test' commands

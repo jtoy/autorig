@@ -74,16 +74,16 @@ Send a world JSON to the orchestrator, record a video, and download it.
 
 ```bash
 distark-check record world.json
-distark-check record world.json --orc https://orchestrator.distark.com -o output.mp4 --timeout 300
+distark-check record world.json --orc http://localhost:3000 -o output.mp4 --timeout 300
 ```
 
 Flow: POST world JSON -> poll status -> download video.
 
-Defaults: orchestrator URL from `ORC_URL` env var or `https://orchestrator.distark.com`, timeout 300s.
+Defaults: orchestrator URL from `ORC_URL` env var or `http://localhost:3000`, timeout 300s.
 
 ## Environment Variables
 
 | Variable | Used by | Description |
 |---|---|---|
 | `GEMINI_API_KEY` | `query` | Gemini API key for visual analysis |
-| `ORC_URL` | `record` | Orchestrator URL (default: `https://orchestrator.distark.com`) |
+| `ORC_URL` | `record`, `imageLoad` | Orchestrator URL (default: `http://localhost:3000`) |

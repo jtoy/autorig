@@ -8,8 +8,27 @@
 import { SkiaRenderer } from '../modules/adapters/skiaRenderer.js';
 import { expandDiffBasedAnimation, isDiffBasedFormat } from '../modules/animationDiff.js';
 import { readFile, writeFile, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import type { RigData, RenderObject } from '../types.js';
 import type { FrameData } from '../modules/animationDiff.js';
+
+function resolveAnimationPath(input: string): string {
+    // If it's an existing file or ends with .json, use as-is
+    if (input.endsWith('.json') || existsSync(input)) {
+        return input;
+    }
+    // Try resolving as a preset name
+    const cliDir = dirname(fileURLToPath(import.meta.url));
+    // From dist/cli/ go up two levels to package root
+    const presetPath = join(cliDir, '..', '..', 'assets', 'presets', `${input}.json`);
+    if (existsSync(presetPath)) {
+        return presetPath;
+    }
+    // Fall back to original input (will error on readFile with a clear message)
+    return input;
+}
 
 interface FrameManifestEntry {
     index: number;
@@ -51,7 +70,9 @@ export async function runAnimate(args: string[]): Promise<void> {
     const height = parseInt(args[args.indexOf('--height') + 1]) || 1000;
 
     const rigData: RigData = JSON.parse(await readFile(rigFile, 'utf-8'));
-    const animRaw = JSON.parse(await readFile(animFile, 'utf-8'));
+    const resolvedAnimFile = resolveAnimationPath(animFile);
+    console.error(`Animation: ${resolvedAnimFile}`);
+    const animRaw = JSON.parse(await readFile(resolvedAnimFile, 'utf-8'));
 
     // Expand animation frames (handles both diff and full-state formats)
     let frames: FrameData[];
@@ -77,7 +98,7 @@ export async function runAnimate(args: string[]): Promise<void> {
 
     const manifest: AnimateManifest = {
         rig_input: rigFile,
-        animation_input: animFile,
+        animation_input: resolvedAnimFile,
         frame_count: frames.length,
         output_dir: outputDir,
         frames: [],

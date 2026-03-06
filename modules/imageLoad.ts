@@ -14,9 +14,9 @@ export class ImageLoader {
 
     /**
      * Creates a new ImageLoader instance
-     * @param baseHost - The base URL for the API (default: 'https://orchestrator.distark.com')
+     * @param baseHost - The base URL for the API (default from ORC_URL env or http://localhost:3000)
      */
-    constructor(baseHost: string = 'https://orchestrator.distark.com') {
+    constructor(baseHost: string = process.env.ORC_URL || 'http://localhost:3000') {
         this.baseHost = baseHost;
         this.imageCache = new Map();
     }
