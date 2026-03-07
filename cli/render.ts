@@ -92,7 +92,7 @@ export async function runRender(args: string[]): Promise<void> {
     let finalHeight = height;
 
     if (autoFit) {
-        const fit = renderer.computeAutoFit(rigData, { canvasWidth: width, canvasHeight: height });
+        const fit = renderer.computeAutoFit(rigData, { canvasWidth: width, canvasHeight: height, loadedImages: renderer.getLoadedImages() });
         finalWidth = fit.canvasWidth;
         finalHeight = fit.canvasHeight;
 
@@ -119,7 +119,7 @@ export async function runRender(args: string[]): Promise<void> {
 
     // Compute report data using the final dimensions
     const renderData = autoFit
-        ? renderer.computeAutoFit(rigData, { canvasWidth: width, canvasHeight: height }).renderData
+        ? renderer.computeAutoFit(rigData, { canvasWidth: width, canvasHeight: height, loadedImages: renderer.getLoadedImages() }).renderData
         : renderer.compute(rigData, { canvasWidth: finalWidth, canvasHeight: finalHeight });
     const report = buildReport(inputFile, outputFile, finalWidth, finalHeight, renderData);
 

@@ -200,6 +200,16 @@ export interface RigRenderData {
 }
 
 /**
+ * Result of auto-fit computation: fitted canvas dimensions + camera offset
+ */
+export interface AutoFitResult {
+    canvasWidth: number;
+    canvasHeight: number;
+    cameraOffset: { x: number; y: number };
+    renderData: RigRenderData;
+}
+
+/**
  * Image loading callback types
  */
 export type ImageLoadCallback = (key: string, img: HTMLImageElement) => void;

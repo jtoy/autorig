@@ -13,7 +13,8 @@ import type {
     RigRenderData,
     Transform2D,
     RenderObject,
-    Position
+    Position,
+    AutoFitResult
 } from '../types.js';
 
 /**
@@ -1380,6 +1381,72 @@ export class CharacterRigRenderer {
     }
 
     /**
+     * Compute auto-fit: finds the bounding box of all rendered objects
+     * and returns adjusted canvas dimensions + camera offset so everything fits.
+     * Pure math — no rendering library dependency.
+     */
+    computeAutoFit(rigData: RigData, options: Partial<RenderOptions> = {}, padding = 40): AutoFitResult {
+        const baseW = options.canvasWidth ?? 800;
+        const baseH = options.canvasHeight ?? 800;
+        const loadedImages = options.loadedImages ?? {};
+
+        // First pass: compute at a large canvas to avoid initial clipping
+        const initW = baseW * 3;
+        const initH = baseH * 3;
+        const initData = this.computeCharacterRigData(rigData, {
+            ...options,
+            canvasWidth: initW,
+            canvasHeight: initH,
+            loadedImages,
+        });
+
+        // Find AABB of all objects
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const obj of initData.objects) {
+            const left = obj.x - obj.width * obj.anchorX;
+            const top = obj.y - obj.height * obj.anchorY;
+            const right = left + obj.width;
+            const bottom = top + obj.height;
+            if (left < minX) minX = left;
+            if (top < minY) minY = top;
+            if (right > maxX) maxX = right;
+            if (bottom > maxY) maxY = bottom;
+        }
+
+        const charCenterX = (minX + maxX) / 2;
+        const charCenterY = (minY + maxY) / 2;
+        const charWidth = maxX - minX;
+        const charHeight = maxY - minY;
+
+        const fitW = Math.ceil(charWidth + padding * 2);
+        const fitH = Math.ceil(charHeight + padding * 2);
+
+        const camXInit = options.cameraOffset?.x ?? 0;
+        const camYInit = options.cameraOffset?.y ?? 0;
+
+        const relCX = charCenterX - (initW / 2 + camXInit);
+        const relCY = charCenterY - (initH / 2 + 100 + camYInit);
+        const newCamX = -relCX;
+        const newCamY = -relCY - 100;
+
+        // Re-compute with the fitted dimensions
+        const fitData = this.computeCharacterRigData(rigData, {
+            ...options,
+            canvasWidth: fitW,
+            canvasHeight: fitH,
+            cameraOffset: { x: newCamX, y: newCamY },
+            loadedImages,
+        });
+
+        return {
+            canvasWidth: fitW,
+            canvasHeight: fitH,
+            cameraOffset: { x: newCamX, y: newCamY },
+            renderData: fitData,
+        };
+    }
+
+    /**
      * Universal Canvas renderer - handles both sync (with cache) and async (loads images)
      * 
      * @param canvas - Canvas element to render to
@@ -1398,16 +1465,17 @@ export class CharacterRigRenderer {
      * await renderer.render(canvas, rigData);
      */
     async render(
-        canvas: HTMLCanvasElement, 
-        rigData: RigData, 
+        canvas: HTMLCanvasElement,
+        rigData: RigData,
         loadedImages?: Record<string, HTMLImageElement | HTMLCanvasElement>,
-        cameraOffset: Position = { x: 0, y: 0 }, 
-        showPivotPoints: boolean = true
+        cameraOffset: Position = { x: 0, y: 0 },
+        showPivotPoints: boolean = true,
+        options?: { autoFit?: boolean }
     ): Promise<void> {
         // If no images provided, check cache or load
         if (!loadedImages) {
             const cache = this.imageLoader.getImageCache();
-            
+
             // If cache is empty, load images from network
             if (cache.size === 0) {
                 console.log('📦 Cache empty - loading images from network...');
@@ -1421,51 +1489,70 @@ export class CharacterRigRenderer {
                 console.log('📦 Using cached images for rendering');
             }
         }
-        
+
         const ctx = canvas.getContext('2d');
         if (!ctx) {
             throw new Error('Failed to get 2D context from canvas');
         }
-        
+
+        // AutoFit: default false to preserve backward compat (React app etc.)
+        // HTML snippet callers should pass { autoFit: true } explicitly
+        const useAutoFit = options?.autoFit ?? false;
+
+        let rigRenderData: RigRenderData;
+
+        if (useAutoFit) {
+            const fit = this.computeAutoFit(rigData, {
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height,
+                cameraOffset,
+                loadedImages,
+            });
+
+            // Resize the canvas to fit the character
+            canvas.width = fit.canvasWidth;
+            canvas.height = fit.canvasHeight;
+            rigRenderData = fit.renderData;
+        } else {
+            rigRenderData = this.computeCharacterRigData(rigData, {
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height,
+                cameraOffset,
+                loadedImages,
+            });
+        }
+
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#f0f0f0';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Compute the rig data
-        const rigRenderData = this.computeCharacterRigData(rigData, {
-            canvasWidth: canvas.width,
-            canvasHeight: canvas.height,
-            cameraOffset,
-            loadedImages
-        });
-        
+
         // Render all objects
         rigRenderData.objects.forEach(obj => {
             // Skip rendering if no image data
             if (!obj.imageData) {
                 return;
             }
-            
+
             ctx.save();
-            
+
             // Move to object position
             ctx.translate(obj.x, obj.y);
-            
+
             // Apply rotation
             ctx.rotate(obj.rotation);
-            
+
             // Apply scale
             ctx.scale(obj.scaleX, obj.scaleY);
-            
+
             // Draw image from anchor point (center by default)
             const drawX = -obj.width * obj.anchorX;
             const drawY = -obj.height * obj.anchorY;
             ctx.drawImage(obj.imageData, drawX, drawY, obj.width, obj.height);
-            
+
             ctx.restore();
         });
-        
+
         // Draw pivot points if enabled
         if (showPivotPoints) {
             rigRenderData.pivotPoints.forEach(pivot => {
@@ -1486,15 +1573,16 @@ export class CharacterRigRenderer {
 // Export a default renderer instance for convenience
 export const defaultRenderer = new CharacterRigRenderer();
 
-// For backwards compatibility - export standalone function
+// Standalone function — autoFit defaults to TRUE for simple HTML usage
 export async function renderCharacterRig(
-    canvas: HTMLCanvasElement, 
-    rigData: RigData, 
+    canvas: HTMLCanvasElement,
+    rigData: RigData,
     loadedImages?: Record<string, HTMLImageElement | HTMLCanvasElement>,
-    cameraOffset: Position = { x: 0, y: 0 }, 
-    showPivotPoints: boolean = true
+    cameraOffset: Position = { x: 0, y: 0 },
+    showPivotPoints: boolean = false,
+    options?: { autoFit?: boolean }
 ): Promise<void> {
-    return defaultRenderer.render(canvas, rigData, loadedImages, cameraOffset, showPivotPoints);
+    return defaultRenderer.render(canvas, rigData, loadedImages, cameraOffset, showPivotPoints, { autoFit: true, ...options });
 }
 
 // Export standalone function for computing rig data

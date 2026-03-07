@@ -7,13 +7,6 @@ import { ImageLoader } from '../imageLoad.js';
 import { CharacterRigRenderer } from '../renderRig.js';
 import type { RigData, RenderOptions, RigRenderData } from '../../types.js';
 
-export interface AutoFitResult {
-    canvasWidth: number;
-    canvasHeight: number;
-    cameraOffset: { x: number; y: number };
-    renderData: RigRenderData;
-}
-
 /**
  * Skia-specific image loader
  * Handles async image loading for Node.js canvas
@@ -192,89 +185,6 @@ export class SkiaRenderer extends CharacterRigRenderer {
     }
 
     /**
-     * Compute auto-fit: finds the bounding box of all rendered objects
-     * and returns adjusted canvas dimensions + camera offset so everything fits.
-     */
-    computeAutoFit(rigData: RigData, options: Partial<RenderOptions> = {}, padding = 40): AutoFitResult {
-        // First pass: compute at a large canvas to avoid initial clipping
-        const initW = (options.canvasWidth ?? 800) * 3;
-        const initH = (options.canvasHeight ?? 800) * 3;
-        const initData = this.compute(rigData, {
-            ...options,
-            canvasWidth: initW,
-            canvasHeight: initH,
-        });
-
-        // Find AABB of all objects
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const obj of initData.objects) {
-            const left = obj.x - obj.width * obj.anchorX;
-            const top = obj.y - obj.height * obj.anchorY;
-            const right = left + obj.width;
-            const bottom = top + obj.height;
-            if (left < minX) minX = left;
-            if (top < minY) minY = top;
-            if (right > maxX) maxX = right;
-            if (bottom > maxY) maxY = bottom;
-        }
-
-        // Character bounding box center in the initial large canvas
-        const charCenterX = (minX + maxX) / 2;
-        const charCenterY = (minY + maxY) / 2;
-        const charWidth = maxX - minX;
-        const charHeight = maxY - minY;
-
-        // Target canvas = character size + padding on each side
-        const fitW = Math.ceil(charWidth + padding * 2);
-        const fitH = Math.ceil(charHeight + padding * 2);
-
-        // Camera offset so character center lands at canvas center
-        // In renderRig: centerX = canvasWidth/2 + cameraOffset.x
-        //               centerY = canvasHeight/2 + 100 + cameraOffset.y
-        // Character center in init pass was at (charCenterX, charCenterY).
-        // Init centerX was: initW/2 + camX_init, init centerY was: initH/2 + 100 + camY_init
-        // We want the character center to be at (fitW/2, fitH/2) in the new canvas.
-        // New centerX = fitW/2 + camX_new, new centerY = fitH/2 + 100 + camY_new
-        // The character positions are relative to (centerX, centerY) in the same way,
-        // so: fitW/2 + camX_new = charCenterX - (initW/2 + camX_init) + fitW/2 + camX_new
-        // Actually simpler: just figure out the offset needed.
-        const camXInit = options.cameraOffset?.x ?? 0;
-        const camYInit = options.cameraOffset?.y ?? 0;
-
-        // In the initial pass, the root was at:
-        //   rootX = initW/2 + camXInit
-        //   rootY = initH/2 + 100 + camYInit
-        // In the fit pass, we want the character's AABB center at fitW/2, fitH/2.
-        // The character AABB center relative to root is:
-        //   relCX = charCenterX - (initW/2 + camXInit)
-        //   relCY = charCenterY - (initH/2 + 100 + camYInit)
-        // In the fit canvas, root will be at (fitW/2 + newCamX, fitH/2 + 100 + newCamY)
-        // Character AABB center will be at root + rel = (fitW/2 + newCamX + relCX, fitH/2 + 100 + newCamY + relCY)
-        // We want that = (fitW/2, fitH/2)
-        // So: newCamX = -relCX, newCamY = -relCY - 100
-
-        const relCX = charCenterX - (initW / 2 + camXInit);
-        const relCY = charCenterY - (initH / 2 + 100 + camYInit);
-        const newCamX = -relCX;
-        const newCamY = -relCY - 100;
-
-        // Re-compute with the fitted dimensions
-        const fitData = this.compute(rigData, {
-            ...options,
-            canvasWidth: fitW,
-            canvasHeight: fitH,
-            cameraOffset: { x: newCamX, y: newCamY },
-        });
-
-        return {
-            canvasWidth: fitW,
-            canvasHeight: fitH,
-            cameraOffset: { x: newCamX, y: newCamY },
-            renderData: fitData,
-        };
-    }
-
-    /**
      * Render objects to canvas context
      * Use this to render pre-computed and modified render data
      */
@@ -350,7 +260,7 @@ export class SkiaRenderer extends CharacterRigRenderer {
         const useAutoFit = options?.autoFit ?? true;
 
         if (useAutoFit) {
-            const fit = this.computeAutoFit(rigData, options);
+            const fit = this.computeAutoFit(rigData, { ...options, loadedImages: this.loadedImages });
             const canvas = await this.createCanvas(fit.canvasWidth, fit.canvasHeight);
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#f0f0f0';
