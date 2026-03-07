@@ -13,6 +13,7 @@ let originalImageSrc = null; // data URL of the uploaded original image
 let editorTool = 'draw';
 let editorImg = null;     // loaded Image for current part
 let undoStack = [];
+let undoStacks = {};  // name → ImageData[]  (per-part undo history)
 
 /* Lightbox state */
 let lightboxMode = null;  // 'original' | 'rig' | 'compare'
@@ -29,6 +30,23 @@ let rigDragging = null;   // { key, startX, startY, origX, origY } or null
 let rigFitScale = 1;      // cached from last render
 let rigOffsetX = 0;
 let rigOffsetY = 0;
+
+/* Reference character overlay state */
+const REF_URLS = {
+    adult: 'https://orchestrator.distark.com/api/v1/artifacts/artid_5x7HP3?hydrate=1',
+    kid:   'https://orchestrator.distark.com/api/v1/artifacts/artid_vyMHom?hydrate=1',
+};
+let refCanvases = {};     // 'adult'|'kid' → offscreen canvas (1000x1000, rendered once)
+let refActive = { adult: false, kid: false };
+let refLoading = { adult: false, kid: false };
+
+/* ── Model Selectors ────────────────────────────────────────────── */
+function getModelParams() {
+    const diecut = document.getElementById('diecutModel').value;
+    const vision = document.getElementById('visionModel').value;
+    const rigM = document.getElementById('rigModel').value;
+    return `&diecut_model=${encodeURIComponent(diecut)}&vision_model=${encodeURIComponent(vision)}&rig_model=${encodeURIComponent(rigM)}`;
+}
 
 /* ── Upload ─────────────────────────────────────────────────────── */
 document.getElementById('uploadInput').addEventListener('change', async (e) => {
@@ -64,10 +82,11 @@ async function runFullPipeline() {
     if (!sessionId) return;
     setStatus('Running full pipeline (this takes a few minutes)...', 'running');
     disableButtons(true);
+    const t0 = Date.now();
 
     try {
         const rounds = parseInt(document.getElementById('diecutRounds').value) || 5;
-        const res = await fetch(`/api/run-all?session_id=${sessionId}&rounds=${rounds}`, { method: 'POST' });
+        const res = await fetch(`/api/run-all?session_id=${sessionId}&rounds=${rounds}${getModelParams()}`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail);
 
@@ -80,7 +99,7 @@ async function runFullPipeline() {
             showRigThumb();
             showCompareThumb();
         }
-        setStatus('Pipeline complete!', 'done');
+        setStatus(`Pipeline complete! (${formatElapsed(Date.now() - t0)})`, 'done');
     } catch (err) {
         setStatus('Pipeline error: ' + err.message, 'error');
     } finally {
@@ -92,15 +111,17 @@ async function runDiecut() {
     if (!sessionId) return;
     setStatus('Running diecut...', 'running');
     disableButtons(true);
+    const t0 = Date.now();
 
     try {
         const rounds = parseInt(document.getElementById('diecutRounds').value) || 5;
-        let res = await fetch(`/api/diecut?session_id=${sessionId}&rounds=${rounds}`, { method: 'POST' });
+        const mp = getModelParams();
+        let res = await fetch(`/api/diecut?session_id=${sessionId}&rounds=${rounds}${mp}`, { method: 'POST' });
         let data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         setStatus('Diecut done, running bboxes...', 'running');
 
-        res = await fetch(`/api/bboxes?session_id=${sessionId}`, { method: 'POST' });
+        res = await fetch(`/api/bboxes?session_id=${sessionId}${mp}`, { method: 'POST' });
         data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         setStatus('Bboxes done, removing backgrounds...', 'running');
@@ -112,7 +133,7 @@ async function runDiecut() {
         renderPartsPanel();
         setStatus('Parts ready, regenerating rig...', 'running');
 
-        res = await fetch(`/api/rig?session_id=${sessionId}`, { method: 'POST' });
+        res = await fetch(`/api/rig?session_id=${sessionId}${mp}`, { method: 'POST' });
         data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         rigData = data.rig;
@@ -120,7 +141,7 @@ async function runDiecut() {
         buildRigControls();
         showRigThumb();
         showCompareThumb();
-        setStatus('Re-diecut complete!', 'done');
+        setStatus(`Re-diecut complete! (${formatElapsed(Date.now() - t0)})`, 'done');
     } catch (err) {
         setStatus('Error: ' + err.message, 'error');
     } finally {
@@ -132,7 +153,7 @@ async function regenRig() {
     if (!sessionId) return;
     setStatus('Regenerating rig...', 'running');
     try {
-        const res = await fetch(`/api/regenerate-rig?session_id=${sessionId}`, { method: 'POST' });
+        const res = await fetch(`/api/regenerate-rig?session_id=${sessionId}${getModelParams()}`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         rigData = data.rig;
@@ -220,6 +241,10 @@ function renderPartsPanel() {
 }
 
 function selectPart(name) {
+    // Save outgoing part's undo stack before switching
+    if (selectedPart && undoStack.length > 0) {
+        undoStacks[selectedPart] = undoStack;
+    }
     selectedPart = name;
     renderPartsPanel();
     loadPartInEditor(name);
@@ -235,12 +260,29 @@ function loadPartInEditor(name) {
         canvas.style.display = 'none';
         placeholder.style.display = 'block';
         placeholder.textContent = `Part "${name}" not available`;
+        undoStack = [];
         return;
     }
 
     placeholder.style.display = 'none';
     canvas.style.display = 'block';
 
+    // Restore saved undo stack if we have one for this part
+    if (undoStacks[name] && undoStacks[name].length > 0) {
+        undoStack = undoStacks[name];
+        const last = undoStack[undoStack.length - 1];
+        canvas.width = last.width;
+        canvas.height = last.height;
+        canvas.getContext('2d').putImageData(last, 0, 0);
+        editorImg = null;
+        document.getElementById('resizeW').value = last.width;
+        document.getElementById('resizeH').value = last.height;
+        document.getElementById('resizeScale').value = 100;
+        document.getElementById('scaleLabel').textContent = '100%';
+        return;
+    }
+
+    // First time loading — load from image data
     const img = new Image();
     img.onload = () => {
         editorImg = img;
@@ -486,6 +528,16 @@ function scalePartPreview(val) {
 }
 
 /* ── Rig Image Loading ──────────────────────────────────────────── */
+const ORC_BASE = 'https://orchestrator.distark.com';
+const MD5_RE = /^[a-f0-9]{32}$/i;
+
+function resolveImageSrc(src) {
+    if (!src || typeof src !== 'string') return src;
+    // MD5 hash → orchestrator CDN URL
+    if (MD5_RE.test(src)) return `${ORC_BASE}/api/v1/artifacts/${src}`;
+    return src;
+}
+
 async function loadRigImages() {
     if (!rigData || !rigData.imagePaths) return;
     loadedImages = {};
@@ -493,12 +545,13 @@ async function loadRigImages() {
     const promises = Object.entries(rigData.imagePaths).map(([key, src]) => {
         return new Promise((resolve) => {
             const img = new Image();
+            img.crossOrigin = 'anonymous';
             img.onload = () => {
                 loadedImages[key] = img;
                 resolve();
             };
             img.onerror = () => resolve();
-            img.src = src;
+            img.src = resolveImageSrc(src);
         });
     });
 
@@ -511,14 +564,29 @@ function buildRigControls() {
     const el = document.getElementById('rigControlsContent');
     el.innerHTML = '';
 
-    // Dimensions
+    // Dimensions (with per-part scale slider)
     if (rigData.dimensionValues) {
         const sec = createRigSection('Dimensions');
+        // Store original dimensions on first build for scale reference
+        if (!rigData._origDimensions) {
+            rigData._origDimensions = {};
+            for (const [name, val] of Object.entries(rigData.dimensionValues)) {
+                rigData._origDimensions[name] = { width: val.width, height: val.height };
+            }
+        }
         for (const [name, val] of Object.entries(rigData.dimensionValues)) {
+            const orig = rigData._origDimensions[name];
+            const curScale = Math.round((val.width / orig.width) * 100);
             const row = document.createElement('div');
-            row.className = 'rig-fields';
+            row.className = 'rig-fields rig-fields--dim';
             row.innerHTML = `
                 <div class="rig-field"><label>${name}</label></div>
+                <div class="rig-field rig-field--scale">
+                    <input type="range" min="20" max="300" value="${curScale}"
+                           oninput="scalePart('${name}',this.value);this.nextElementSibling.textContent=this.value+'%'"
+                           title="Scale ${name}">
+                    <span class="scale-label">${curScale}%</span>
+                </div>
                 <div class="rig-field">
                     <label>w</label>
                     <input type="number" value="${val.width}" onchange="updateRigDim('${name}','width',this.value)">
@@ -608,21 +676,75 @@ function createRigSection(title) {
 function updateRigDim(name, prop, val) {
     if (!rigData || !rigData.dimensionValues || !rigData.dimensionValues[name]) return;
     rigData.dimensionValues[name][prop] = parseInt(val);
+    saveRig();
 }
 
 function updateRigPivot(name, prop, val) {
     if (!rigData || !rigData.pivotPoints || !rigData.pivotPoints[name]) return;
     rigData.pivotPoints[name][prop] = parseInt(val);
+    saveRig();
 }
 
 function updateRigJoint(name, prop, val) {
     if (!rigData || !rigData.jointOffset || !rigData.jointOffset[name]) return;
     rigData.jointOffset[name][prop] = parseInt(val);
+    saveRig();
 }
 
 function updateRigZ(name, val) {
     if (!rigData || !rigData.zIndexValues) return;
     rigData.zIndexValues[name] = parseInt(val);
+    saveRig();
+}
+
+function scalePart(name, pct) {
+    if (!rigData || !rigData.dimensionValues || !rigData._origDimensions) return;
+    const orig = rigData._origDimensions[name];
+    if (!orig) return;
+    const scale = pct / 100;
+    rigData.dimensionValues[name].width = Math.round(orig.width * scale);
+    rigData.dimensionValues[name].height = Math.round(orig.height * scale);
+    // Update the w/h number inputs in the same row without full rebuild
+    const sec = document.getElementById('rigControlsContent');
+    if (sec) {
+        const inputs = sec.querySelectorAll('input[type="number"]');
+        for (const inp of inputs) {
+            const handler = inp.getAttribute('onchange') || '';
+            if (handler.includes(`'${name}','width'`)) inp.value = rigData.dimensionValues[name].width;
+            if (handler.includes(`'${name}','height'`)) inp.value = rigData.dimensionValues[name].height;
+        }
+    }
+    saveRig();
+}
+
+/* Scroll-to-adjust: mousewheel on any rig number input increments/decrements.
+   Hold Shift for 10x step. */
+document.getElementById('rigControlsContent').addEventListener('wheel', (e) => {
+    const inp = e.target;
+    if (inp.tagName !== 'INPUT' || inp.type !== 'number') return;
+    e.preventDefault();
+    const step = e.shiftKey ? 10 : 1;
+    const delta = e.deltaY < 0 ? step : -step;
+    inp.value = parseInt(inp.value || 0) + delta;
+    inp.dispatchEvent(new Event('change'));
+}, { passive: false });
+
+/* Debounced save — persists rig to server */
+let _saveRigTimer = null;
+function saveRig() {
+    if (!sessionId || !rigData) return;
+    clearTimeout(_saveRigTimer);
+    _saveRigTimer = setTimeout(async () => {
+        try {
+            await fetch(`/api/rig-data?session_id=${sessionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rig: rigData }),
+            });
+        } catch (err) {
+            console.warn('Failed to save rig:', err);
+        }
+    }, 500);
 }
 
 /* ── Animation Preview (ported from distark-render) ─────────────── */
@@ -657,6 +779,7 @@ function computeRig(rig) {
     const imageScale = rig.imageScale ?? 1.0;
 
     const objects = [];
+    const computedPivots = {}; // key → { x, y, parentTransform }
     const root = { x: centerX, y: centerY, rotation: 0, scaleX: 1, scaleY: 1 };
 
     // Torso — anchor bottom-center (0.5, 1)
@@ -672,6 +795,16 @@ function computeRig(rig) {
             zIndex: zIndexValues.torso || 8,
             img: loadedImages.torso,
         });
+    }
+
+    // Head pivot (world space)
+    {
+        const pivot = pivotPoints.torso_head || { x: 0, y: 0 };
+        const headPivotWorld = applyTransform(root, {
+            x: pivot.x || 0, y: pivot.y || 0,
+            rotation: 0, scaleX: 1, scaleY: 1,
+        });
+        computedPivots.torso_head = { x: headPivotWorld.x, y: headPivotWorld.y, parentTransform: root };
     }
 
     // Head
@@ -703,8 +836,15 @@ function computeRig(rig) {
     // Arms and legs — matches distark_render's per-limb chain exactly
     function addChain(parentPivotKey, upperName, upperImgKey,
                       elbowPivotKey, lowerName, lowerImgKey) {
+        // Compute parent pivot world position (torso → upper limb)
+        const pivot = pivotPoints[parentPivotKey] || { x: 0, y: 0 };
+        const parentPivotWorld = applyTransform(root, {
+            x: pivot.x || 0, y: pivot.y || 0,
+            rotation: 0, scaleX: 1, scaleY: 1,
+        });
+        computedPivots[parentPivotKey] = { x: parentPivotWorld.x, y: parentPivotWorld.y, parentTransform: root };
+
         if (visibility[upperName] !== false) {
-            const pivot = pivotPoints[parentPivotKey] || { x: 0, y: 0 };
             const joff = jointOffset[parentPivotKey] || { x: 0, y: 0 };
             const w = (dimensions[upperName]?.width || 30) * imageScale;
             const h = (dimensions[upperName]?.height || 50) * imageScale;
@@ -729,10 +869,17 @@ function computeRig(rig) {
                 img: loadedImages[upperImgKey || upperName],
             });
 
+            // Compute elbow/knee pivot world position (upper → lower limb)
+            const upperH = (dimensions[upperName]?.height || 50);
+            const ePivot = pivotPoints[elbowPivotKey] || { x: 0, y: 0 };
+            const elbowBase = applyTransform(parentT, {
+                x: ePivot.x || 0, y: (ePivot.y || 0) - upperH,
+                rotation: 0, scaleX: 1, scaleY: 1,
+            });
+            computedPivots[elbowPivotKey] = { x: elbowBase.x, y: elbowBase.y, parentTransform: parentT };
+
             // Lower limb
             if (visibility[lowerName] !== false) {
-                const upperH = (dimensions[upperName]?.height || 50);
-                const ePivot = pivotPoints[elbowPivotKey] || { x: 0, y: 0 };
                 const eJoff = jointOffset[elbowPivotKey] || { x: 0, y: 0 };
                 const lw = (dimensions[lowerName]?.width || 25) * imageScale;
                 const lh = (dimensions[lowerName]?.height || 45) * imageScale;
@@ -770,7 +917,7 @@ function computeRig(rig) {
              'rightThigh_rightLeg', 'rightLeg', 'rightLeg');
 
     objects.sort((a, b) => a.zIndex - b.zIndex);
-    return objects;
+    return { objects, pivotPoints: computedPivots };
 }
 
 /* Compute bounding box of all rendered objects */
@@ -802,33 +949,28 @@ function applyWalkCycle(rig, t) {
     const forearmSwing = 0.2;
 
     // Legs swing opposite
-    rotations.leftThigh = (rotations.leftThigh || -Math.PI) + Math.sin(t) * swing;
-    rotations.rightThigh = (rotations.rightThigh || Math.PI) - Math.sin(t) * swing;
+    rotations.leftThigh = (rotations.leftThigh ?? 0) + Math.sin(t) * swing;
+    rotations.rightThigh = (rotations.rightThigh ?? 0) - Math.sin(t) * swing;
 
     // Knees bend forward during stride
-    rotations.leftLeg = (rotations.leftLeg || 0) + Math.max(0, -Math.sin(t)) * kneeSwing;
-    rotations.rightLeg = (rotations.rightLeg || 0) + Math.max(0, Math.sin(t)) * kneeSwing;
+    rotations.leftLeg = (rotations.leftLeg ?? 0) + Math.max(0, -Math.sin(t)) * kneeSwing;
+    rotations.rightLeg = (rotations.rightLeg ?? 0) + Math.max(0, Math.sin(t)) * kneeSwing;
 
     // Arms swing opposite to legs
-    rotations.leftUpperArm = (rotations.leftUpperArm || -Math.PI) - Math.sin(t) * armSwing;
-    rotations.rightUpperArm = (rotations.rightUpperArm || Math.PI) + Math.sin(t) * armSwing;
+    rotations.leftUpperArm = (rotations.leftUpperArm ?? 0) - Math.sin(t) * armSwing;
+    rotations.rightUpperArm = (rotations.rightUpperArm ?? 0) + Math.sin(t) * armSwing;
 
     // Forearms follow with slight delay
-    rotations.leftForearm = (rotations.leftForearm || 0) - Math.sin(t + 0.5) * forearmSwing;
-    rotations.rightForearm = (rotations.rightForearm || 0) + Math.sin(t + 0.5) * forearmSwing;
+    rotations.leftForearm = (rotations.leftForearm ?? 0) - Math.sin(t + 0.5) * forearmSwing;
+    rotations.rightForearm = (rotations.rightForearm ?? 0) + Math.sin(t + 0.5) * forearmSwing;
 
     // Slight head bob
-    rotations.head = (rotations.head || 0) + Math.sin(t * 2) * 0.03;
+    rotations.head = (rotations.head ?? 0) + Math.sin(t * 2) * 0.03;
 
     return { ...rig, rotationValues: rotations };
 }
 
 function renderPreview(timestamp) {
-    if (!rigData) {
-        requestAnimationFrame(renderPreview);
-        return;
-    }
-
     const canvas = document.getElementById('previewCanvas');
     const ctx = canvas.getContext('2d');
     const speed = parseFloat(document.getElementById('animSpeed').value) || 1;
@@ -844,14 +986,26 @@ function renderPreview(timestamp) {
     ctx.fillStyle = '#f0f0f0';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Apply walk cycle if animating
-    const frameRig = animating ? applyWalkCycle(rigData, animTime) : rigData;
-
-    // Compute at virtual 1000x1000 canvas (matching distark_render)
-    const objects = computeRig(frameRig);
+    // Compute rig objects (or empty if no rig loaded yet)
+    let objects = [];
+    let computedPivots = {};
+    if (rigData) {
+        const frameRig = animating ? applyWalkCycle(rigData, animTime) : rigData;
+        const result = computeRig(frameRig);
+        objects = result.objects;
+        computedPivots = result.pivotPoints;
+    }
 
     // Auto-scale to fit the preview canvas with padding
-    const bounds = computeBounds(objects);
+    const anyRef = (refActive.adult && refCanvases.adult) || (refActive.kid && refCanvases.kid);
+    const bounds = objects.length > 0 ? computeBounds(objects) : { minX: 0, minY: 0, maxX: VIRTUAL_W, maxY: VIRTUAL_H };
+    // Expand bounds to include full virtual space when reference overlays are active
+    if (anyRef) {
+        bounds.minX = Math.min(bounds.minX, 0);
+        bounds.minY = Math.min(bounds.minY, 0);
+        bounds.maxX = Math.max(bounds.maxX, VIRTUAL_W);
+        bounds.maxY = Math.max(bounds.maxY, VIRTUAL_H);
+    }
     const charW = bounds.maxX - bounds.minX;
     const charH = bounds.maxY - bounds.minY;
     const padding = 20;
@@ -870,6 +1024,16 @@ function renderPreview(timestamp) {
     ctx.translate(offsetX, offsetY);
     ctx.scale(fitScale, fitScale);
 
+    // Draw reference character ghosts (behind the rig)
+    for (const which of ['adult', 'kid']) {
+        if (refActive[which] && refCanvases[which]) {
+            ctx.save();
+            ctx.globalAlpha = 0.25;
+            ctx.drawImage(refCanvases[which], 0, 0, VIRTUAL_W, VIRTUAL_H);
+            ctx.restore();
+        }
+    }
+
     // Draw all objects — highlight hovered part in 'part' mode
     objects.forEach(obj => {
         if (!obj.img) return;
@@ -887,38 +1051,34 @@ function renderPreview(timestamp) {
         ctx.restore();
     });
 
-    // Draw pivot points
-    const rootX = VIRTUAL_W / 2;
-    const rootY = VIRTUAL_H / 2 + 100;
+    // Draw pivot points using computed world-space positions
     const inPivotMode = rigEditMode === 'pivot';
-    if (rigData.pivotPoints) {
-        for (const [key, pv] of Object.entries(rigData.pivotPoints)) {
-            const wx = rootX + (pv.x || 0);
-            const wy = rootY + (pv.y || 0);
-            const r = inPivotMode ? 8 / fitScale : 4 / fitScale;
-            const isActive = rigDragging && rigDragging.key === key;
+    for (const [key, cp] of Object.entries(computedPivots)) {
+        const wx = cp.x;
+        const wy = cp.y;
+        const r = inPivotMode ? 8 / fitScale : 4 / fitScale;
+        const isActive = rigDragging && rigDragging.key === key;
+        ctx.save();
+        ctx.fillStyle = isActive ? '#e94560' : (inPivotMode ? 'rgba(0, 180, 255, 0.9)' : 'rgba(0, 150, 255, 0.8)');
+        ctx.beginPath();
+        ctx.arc(wx, wy, r, 0, Math.PI * 2);
+        ctx.fill();
+        if (inPivotMode) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5 / fitScale;
+            ctx.stroke();
+        }
+        ctx.restore();
+        // Label in pivot mode
+        if (inPivotMode) {
+            const sx = wx;
+            const sy = wy - r - 2 / fitScale;
             ctx.save();
-            ctx.fillStyle = isActive ? '#e94560' : (inPivotMode ? 'rgba(0, 180, 255, 0.9)' : 'rgba(0, 150, 255, 0.8)');
-            ctx.beginPath();
-            ctx.arc(wx, wy, r, 0, Math.PI * 2);
-            ctx.fill();
-            if (inPivotMode) {
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5 / fitScale;
-                ctx.stroke();
-            }
+            ctx.font = `${10 / fitScale}px sans-serif`;
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.fillText(key.replace('torso_', '').replace('UpperArm_', '→'), sx, sy);
             ctx.restore();
-            // Label in pivot mode
-            if (inPivotMode) {
-                const sx = wx;
-                const sy = wy - r - 2 / fitScale;
-                ctx.save();
-                ctx.font = `${10 / fitScale}px sans-serif`;
-                ctx.fillStyle = '#fff';
-                ctx.textAlign = 'center';
-                ctx.fillText(key.replace('torso_', '').replace('UpperArm_', '→'), sx, sy);
-                ctx.restore();
-            }
         }
     }
 
@@ -984,21 +1144,18 @@ function screenToVirtual(e, canvas) {
     return { sx, sy, vx, vy };
 }
 
-// Find nearest pivot point within grab radius
+// Find nearest pivot point within grab radius (uses computed world-space positions)
 function findNearestPivot(vx, vy) {
     if (!rigData || !rigData.pivotPoints) return null;
-    const rootX = VIRTUAL_W / 2;
-    const rootY = VIRTUAL_H / 2 + 100;
+    const { pivotPoints: computedPivots } = computeRig(rigData);
     const grabR = 15 / rigFitScale;
     let best = null;
     let bestDist = grabR;
-    for (const [key, pv] of Object.entries(rigData.pivotPoints)) {
-        const px = rootX + (pv.x || 0);
-        const py = rootY + (pv.y || 0);
-        const d = Math.hypot(vx - px, vy - py);
+    for (const [key, cp] of Object.entries(computedPivots)) {
+        const d = Math.hypot(vx - cp.x, vy - cp.y);
         if (d < bestDist) {
             bestDist = d;
-            best = key;
+            best = { key, parentTransform: cp.parentTransform };
         }
     }
     return best;
@@ -1007,7 +1164,7 @@ function findNearestPivot(vx, vy) {
 // Find which body part is under the cursor
 function findPartUnderCursor(vx, vy) {
     if (!rigData) return null;
-    const objects = computeRig(rigData);
+    const { objects } = computeRig(rigData);
     // Check in reverse z-order (top-most first)
     for (let i = objects.length - 1; i >= 0; i--) {
         const obj = objects[i];
@@ -1049,11 +1206,12 @@ previewCanvas.addEventListener('mousedown', (e) => {
     const { vx, vy } = screenToVirtual(e, previewCanvas);
 
     if (rigEditMode === 'pivot') {
-        const key = findNearestPivot(vx, vy);
-        if (!key) return;
-        const pv = rigData.pivotPoints[key];
+        const hit = findNearestPivot(vx, vy);
+        if (!hit) return;
+        const pv = rigData.pivotPoints[hit.key];
         rigDragging = {
-            key,
+            key: hit.key,
+            parentTransform: hit.parentTransform,
             startVX: vx, startVY: vy,
             origX: pv.x || 0, origY: pv.y || 0,
         };
@@ -1064,9 +1222,13 @@ previewCanvas.addEventListener('mousedown', (e) => {
         const pivotKey = PART_TO_PIVOT[partName];
         if (!pivotKey || !rigData.pivotPoints[pivotKey]) return;
         const pv = rigData.pivotPoints[pivotKey];
+        // Look up parent transform for this pivot
+        const { pivotPoints: computedPivots } = computeRig(rigData);
+        const cp = computedPivots[pivotKey];
         rigDragging = {
             key: pivotKey,
             partName,
+            parentTransform: cp ? cp.parentTransform : { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
             startVX: vx, startVY: vy,
             origX: pv.x || 0, origY: pv.y || 0,
         };
@@ -1079,8 +1241,15 @@ document.addEventListener('mousemove', (e) => {
     const { vx, vy } = screenToVirtual(e, previewCanvas);
     const dx = vx - rigDragging.startVX;
     const dy = vy - rigDragging.startVY;
-    const newX = Math.round(rigDragging.origX + dx);
-    const newY = Math.round(rigDragging.origY + dy);
+    // Inverse-transform delta from virtual (world) space into parent's local space
+    const pt = rigDragging.parentTransform;
+    const theta = pt ? pt.rotation : 0;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const localDx =  dx * cos + dy * sin;
+    const localDy = -dx * sin + dy * cos;
+    const newX = Math.round(rigDragging.origX + localDx);
+    const newY = Math.round(rigDragging.origY + localDy);
     rigData.pivotPoints[rigDragging.key].x = newX;
     rigData.pivotPoints[rigDragging.key].y = newY;
 });
@@ -1091,6 +1260,7 @@ document.addEventListener('mouseup', () => {
         previewCanvas.style.cursor = rigEditMode === 'pivot' ? 'crosshair' : 'grab';
         // Rebuild rig controls once on drop to sync number inputs
         buildRigControls();
+        saveRig();
     }
 });
 
@@ -1113,7 +1283,7 @@ function showRigThumb() {
     ctx.fillStyle = '#f0f0f0';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const objects = computeRig(rigData);
+    const { objects } = computeRig(rigData);
     const bounds = computeBounds(objects);
     const charW = bounds.maxX - bounds.minX;
     const charH = bounds.maxY - bounds.minY;
@@ -1168,7 +1338,7 @@ function showCompareThumb() {
 
     // Draw rig at half opacity on top
     ctx.globalAlpha = 0.5;
-    const objects = computeRig(rigData);
+    const { objects } = computeRig(rigData);
     const bounds = computeBounds(objects);
     const charW = bounds.maxX - bounds.minX;
     const charH = bounds.maxY - bounds.minY;
@@ -1294,7 +1464,7 @@ function renderLightboxRig(timestamp) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const frameRig = lightboxAnimating ? applyWalkCycle(rigData, lightboxAnimTime) : rigData;
-    const objects = computeRig(frameRig);
+    const { objects } = computeRig(frameRig);
 
     const bounds = computeBounds(objects);
     const charW = bounds.maxX - bounds.minX;
@@ -1352,7 +1522,7 @@ function renderCompareFrame() {
     // Draw rig on top (opacity = compareOpacity)
     if (rigData && Object.keys(loadedImages).length > 0) {
         ctx.globalAlpha = compareOpacity;
-        const objects = computeRig(rigData);
+        const { objects } = computeRig(rigData);
         const bounds = computeBounds(objects);
         const charW = bounds.maxX - bounds.minX;
         const charH = bounds.maxY - bounds.minY;
@@ -1381,6 +1551,13 @@ function renderCompareFrame() {
 }
 
 /* ── Utilities ──────────────────────────────────────────────────── */
+function formatElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
 function setStatus(msg, type) {
     const el = document.getElementById('status');
     el.textContent = msg;
@@ -1393,5 +1570,54 @@ function disableButtons(disabled) {
     document.getElementById('btnRegenRig').disabled = disabled;
 }
 
+/* ── Reference Character Overlays ───────────────────────────────── */
+function toggleRef(which) {
+    // Don't toggle off while still loading — just ignore the click
+    if (refLoading[which]) return;
+    refActive[which] = !refActive[which];
+    const btn = document.getElementById(which === 'adult' ? 'refAdult' : 'refKid');
+    if (btn) btn.classList.toggle('active', refActive[which]);
+    if (refActive[which] && !refCanvases[which]) {
+        loadRefCharacter(which);
+    }
+}
+
+async function loadRefCharacter(which) {
+    if (!window._createRigRenderer) {
+        // Module not loaded yet — wait for it
+        window.addEventListener('distark-render-ready', () => loadRefCharacter(which), { once: true });
+        return;
+    }
+    refLoading[which] = true;
+    const btn = document.getElementById(which === 'adult' ? 'refAdult' : 'refKid');
+    if (btn) btn.textContent = (which === 'adult' ? 'Adult' : 'Kid') + '...';
+    try {
+        console.log('[ref] Fetching', which, 'from', REF_URLS[which]);
+        const res = await fetch(REF_URLS[which]);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.log('[ref] Got data for', which, '— imagePaths:', Object.keys(data.imagePaths || {}).length);
+        // Each character gets its own renderer so image caches don't collide
+        const renderer = window._createRigRenderer();
+        const offscreen = document.createElement('canvas');
+        offscreen.width = VIRTUAL_W;
+        offscreen.height = VIRTUAL_H;
+        console.log('[ref] Rendering', which, '...');
+        await renderer.render(offscreen, data, undefined, { x: 0, y: 0 }, false, { autoFit: false });
+        refCanvases[which] = offscreen;
+        console.log('[ref] Rendered', which, 'OK');
+        if (btn) btn.textContent = (which === 'adult' ? 'Adult Ref' : 'Kid Ref');
+    } catch (err) {
+        console.error('[ref] Failed to load ref character:', which, err);
+        refActive[which] = false;
+        if (btn) { btn.textContent = (which === 'adult' ? 'Adult Ref' : 'Kid Ref'); btn.classList.remove('active'); }
+    } finally {
+        refLoading[which] = false;
+    }
+}
+
 /* ── Init ───────────────────────────────────────────────────────── */
 requestAnimationFrame(renderPreview);
+
+// Auto-load adult reference character on page load
+toggleRef('adult');

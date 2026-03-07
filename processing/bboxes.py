@@ -15,20 +15,20 @@ def parse_json(json_output: str) -> str:
             break
     return json_output
 
-def bboxes(client, inputPath, outputFolder):
+def bboxes(client, inputPath, outputFolder, model: str = "gemini-3-flash-preview"):
     """
     Detects 10 parts of a figure and saves crops to outputFolder.
 
     Note:
         The crops are plain rectangular cutouts, so they keep a solid background.
         If you need transparency, run background removal on each crop afterward.
-    
+
     Args:
         client: The Google GenAI client instance.
         inputPath: Path to the input image file.
         outputFolder: Path where the cropped images will be saved.
+        model: Model to use for bounding box detection.
     """
-    model = "gemini-3-flash-preview"
     temperature = 0
     prompt = """
     Task: ONLY detect and return bounding boxes. Do not edit, redraw, or reinterpret the image.
@@ -79,7 +79,7 @@ def bboxes(client, inputPath, outputFolder):
             crop.save(save_path)
 
 
-def segmentation_masks(client, inputPath, outputFolder, parts=None):
+def segmentation_masks(client, inputPath, outputFolder, parts=None, model: str = "gemini-3-flash-preview"):
     """
     Generates segmentation masks and transparent cutouts for parts of a figure.
 
@@ -88,8 +88,8 @@ def segmentation_masks(client, inputPath, outputFolder, parts=None):
         inputPath: Path to the input image file.
         outputFolder: Path where the masks and cutouts will be saved.
         parts: Optional list of part labels to detect.
+        model: Model to use for segmentation.
     """
-    model = "gemini-3-flash-preview"
     temperature = 0
 
     if parts is None:

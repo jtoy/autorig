@@ -89,7 +89,7 @@ def trim_transparent(img, threshold=20):
     return img.crop(bbox)
 
 
-def generate_rig_params(client, original_image_path):
+def generate_rig_params(client, original_image_path, model: str = "gemini-2.5-flash"):
     """
     Show Gemini ONLY the original character image + Tank reference.
     Have it produce all rig params by analyzing the character's proportions visually.
@@ -137,9 +137,9 @@ Return JSON with exactly these 4 keys: "dimensionValues", "pivotPoints", "jointO
 Include all 10 parts: head, torso, leftUpperArm, rightUpperArm, leftForearm, rightForearm, leftThigh, rightThigh, leftLeg, rightLeg.
 Include all 9 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUpperArm, torso_leftThigh, torso_rightThigh, leftUpperArm_leftForearm, rightUpperArm_rightForearm, leftThigh_leftLeg, rightThigh_rightLeg."""
 
-    print(f"[rig] Generating rig params with gemini-2.5-flash for {ow}x{oh}px image...")
+    print(f"[rig] Generating rig params with {model} for {ow}x{oh}px image...")
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=model,
         contents=[original, prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -152,7 +152,7 @@ Include all 9 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUp
     return result
 
 
-def rig(client, original_image_path, parts_dir, output_path):
+def rig(client, original_image_path, parts_dir, output_path, model: str = "gemini-2.5-flash"):
     """
     Generate a distark rig JSON from die-cut body parts.
 
@@ -177,7 +177,7 @@ def rig(client, original_image_path, parts_dir, output_path):
 
     # Step 2: Gemini analyzes the ORIGINAL image for all rig parameters
     print("Asking Gemini to analyze original image for rig parameters...")
-    params = generate_rig_params(client, original_image_path)
+    params = generate_rig_params(client, original_image_path, model=model)
 
     dims = params['dimensionValues']
     pivot_points = params['pivotPoints']

@@ -55,6 +55,40 @@ body {
     color: #aaa;
 }
 
+/* Model selector bar */
+.model-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 16px;
+    background: #121a30;
+    border-bottom: 1px solid #333;
+    height: 32px;
+}
+
+.model-bar label {
+    font-size: 11px;
+    color: #888;
+    white-space: nowrap;
+}
+
+.model-bar select {
+    padding: 2px 6px;
+    border: 1px solid #444;
+    border-radius: 3px;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-size: 11px;
+    font-family: monospace;
+    cursor: pointer;
+    max-width: 220px;
+}
+
+.model-bar select:focus {
+    border-color: #e94560;
+    outline: none;
+}
+
 #status.running { color: #f0c040; }
 #status.done { color: #40f080; }
 #status.error { color: #f04040; }
@@ -62,7 +96,7 @@ body {
 /* Main content */
 .main {
     display: flex;
-    height: calc(100vh - 50px);
+    height: calc(100vh - 82px);
 }
 
 /* Left: Parts panel */
@@ -202,7 +236,8 @@ body {
 .preview-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 4px 8px;
     padding: 6px 12px;
     background: #1a1a30;
 }
@@ -302,6 +337,31 @@ body {
 .rig-field input:focus {
     border-color: #e94560;
     outline: none;
+}
+
+/* Dimension rows: 4 columns to fit label + slider + w + h */
+.rig-fields--dim {
+    grid-template-columns: 1fr auto auto auto;
+}
+
+.rig-field--scale {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rig-field--scale input[type="range"] {
+    width: 70px;
+    height: 14px;
+    accent-color: #e94560;
+    cursor: pointer;
+}
+
+.rig-field--scale .scale-label {
+    font-size: 10px;
+    color: #aaa;
+    min-width: 32px;
+    font-family: monospace;
 }
 
 /* Resize controls in editor */

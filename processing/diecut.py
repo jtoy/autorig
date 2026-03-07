@@ -27,17 +27,18 @@ JUDGE_CRITERIA = [
      "not overlapping each other?"),
 ]
 
-def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: int = 5):
+def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: int = 5, model: str = "gemini-3-pro-image-preview", judge_model: str = "gemini-3-flash-preview"):
     """
     Performs character die-cutting for animation using Gemini.
     Separates head, torso, arms, hands, legs, and feet into a single image.
-    
+
     Args:
         client: The Google GenAI client instance.
         imagePath: Path to the input image file.
         outputPath: Path where the resulting image will be saved.
+        model: Model to use for diecut generation.
+        judge_model: Model to use for judging diecut quality.
     """
-    model = "gemini-3-pro-image-preview"
     temperature = 0
     prompt = """
     EXTRACT the character into 10 separate pieces on a white background: 
@@ -80,7 +81,6 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: 
         Returns (scores_dict, total_score, feedback_str) where scores_dict
         maps criterion name to {"pass": bool, "reason": str}.
         """
-        judge_model = "gemini-3-flash-preview"
         example_input_bytes = pil_to_bytes(example_input)
         example_output_bytes = pil_to_bytes(example_output)
 
@@ -173,7 +173,7 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: 
         generated_bytes, generated_mime = extract_inline_image(response.parts)
         if generated_bytes is None:
             raise ValueError("No image returned by model.")
-        print(f"[diecut] Round {round_index}: got image, running judge (gemini-3-flash-preview)...")
+        print(f"[diecut] Round {round_index}: got image, running judge ({judge_model})...")
 
         scores, total, feedback = judge_image(
             pil_to_bytes(image), generated_bytes, generated_mime
