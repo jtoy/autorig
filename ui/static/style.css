@@ -147,6 +147,33 @@ body {
 
 .part-item.missing { opacity: 0.3; }
 
+.part-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.part-action-btn {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #444;
+    border-radius: 3px;
+    background: #222;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+    transition: background 0.15s, color 0.15s;
+}
+
+.part-action-btn:hover {
+    background: #0f3460;
+    color: #fff;
+}
+
 /* Center: Editor */
 .editor-panel {
     flex: 1;

@@ -206,6 +206,19 @@ async function loadExistingRig() {
     input.click();
 }
 
+function downloadRig() {
+    if (!rigData) return;
+    const json = JSON.stringify(rigData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rig.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
 /* ── Parts Panel ────────────────────────────────────────────────── */
 const ALL_PART_NAMES = [
     'head', 'torso',
@@ -234,10 +247,103 @@ function renderPartsPanel() {
         label.className = 'part-label';
         label.textContent = name.replace(/_/g, ' ');
 
+        const actions = document.createElement('span');
+        actions.className = 'part-actions';
+
+        if (part) {
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'part-action-btn';
+            dlBtn.title = 'Download ' + name;
+            dlBtn.textContent = '\u2B07';
+            dlBtn.onclick = (e) => { e.stopPropagation(); downloadPart(name); };
+            actions.appendChild(dlBtn);
+        }
+
+        const ulBtn = document.createElement('button');
+        ulBtn.className = 'part-action-btn';
+        ulBtn.title = 'Upload ' + name;
+        ulBtn.textContent = '\u2B06';
+        ulBtn.onclick = (e) => { e.stopPropagation(); uploadPart(name); };
+        actions.appendChild(ulBtn);
+
         div.appendChild(img);
         div.appendChild(label);
+        div.appendChild(actions);
         el.appendChild(div);
     });
+}
+
+function downloadPart(name) {
+    const part = parts.find(p => p.name === name);
+    if (!part || !part.image) return;
+    const a = document.createElement('a');
+    a.href = part.image;
+    a.download = name + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function uploadPart(name) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/webp';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Read file as data URL
+        const dataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+        });
+
+        // Update or create part in local state
+        let part = parts.find(p => p.name === name);
+        if (part) {
+            part.image = dataUrl;
+        } else {
+            parts.push({ name, image: dataUrl });
+        }
+
+        // Update rig imagePaths if we have a rig
+        if (rigData && rigData.imagePaths) {
+            const rigNameMap = {
+                head: 'head', torso: 'torso',
+                left_upperarm: 'leftUpperArm', right_upperarm: 'rightUpperArm',
+                left_forearm: 'leftForearm', right_forearm: 'rightForearm',
+                left_thigh: 'leftThigh', right_thigh: 'rightThigh',
+                left_calf: 'leftLeg', right_calf: 'rightLeg',
+            };
+            const rigName = rigNameMap[name];
+            if (rigName) {
+                rigData.imagePaths[rigName] = dataUrl;
+                await loadRigImages();
+            }
+        }
+
+        // Upload to server if we have a session
+        if (sessionId) {
+            const form = new FormData();
+            form.append('file', file);
+            try {
+                await fetch(`/api/parts/${name}?session_id=${sessionId}`, {
+                    method: 'PUT', body: form,
+                });
+            } catch (err) {
+                console.warn('Failed to upload part to server:', err);
+            }
+        }
+
+        // Clear cached undo stack for this part so editor reloads fresh
+        delete undoStacks[name];
+
+        renderPartsPanel();
+        if (selectedPart === name) loadPartInEditor(name);
+        setStatus(`Part "${name}" uploaded`, 'done');
+    };
+    input.click();
 }
 
 function selectPart(name) {
@@ -664,6 +770,7 @@ function buildRigControls() {
     }
 
     document.getElementById('btnRegenRig').disabled = false;
+    document.getElementById('btnDownloadRig').disabled = false;
 }
 
 function createRigSection(title) {
