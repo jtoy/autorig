@@ -24,6 +24,10 @@ let lightboxRafId = null;
 let compareOpacity = 0.5; // 0 = original only, 1 = rig only
 let compareOrigImg = null; // cached Image for compare overlay
 
+/* Cross-highlight state */
+let highlightedPart = null;    // camelCase rig name currently highlighted
+let highlightExpiry = 0;       // timestamp when highlight fades
+
 /* Rig interaction state */
 let rigEditMode = 'view'; // 'view' | 'pivot' | 'part'
 let rigDragging = null;   // { key, startX, startY, origX, origY } or null
@@ -49,10 +53,8 @@ function getModelParams() {
 }
 
 /* ── Upload ─────────────────────────────────────────────────────── */
-document.getElementById('uploadInput').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+async function handleImageUpload(file) {
     if (!file) return;
-
     setStatus('Uploading...', 'running');
     const form = new FormData();
     form.append('file', file);
@@ -67,7 +69,6 @@ document.getElementById('uploadInput').addEventListener('change', async (e) => {
         document.getElementById('btnRunAll').disabled = false;
         document.getElementById('btnDiecut').disabled = false;
 
-        // Show original image thumbnail
         if (data.image_preview) {
             originalImageSrc = data.image_preview;
             showOriginalThumb(data.image_preview);
@@ -75,6 +76,10 @@ document.getElementById('uploadInput').addEventListener('change', async (e) => {
     } catch (err) {
         setStatus('Upload failed: ' + err.message, 'error');
     }
+}
+
+document.getElementById('uploadInput').addEventListener('change', (e) => {
+    handleImageUpload(e.target.files[0]);
 });
 
 /* ── Pipeline ───────────────────────────────────────────────────── */
@@ -167,42 +172,42 @@ async function regenRig() {
     }
 }
 
+async function handleRigLoad(file) {
+    if (!file) return;
+    try {
+        const text = await file.text();
+        rigData = JSON.parse(text);
+        parts = [];
+        if (rigData.imagePaths) {
+            const nameMap = {
+                head: 'head', torso: 'torso',
+                leftUpperArm: 'left_upperarm', rightUpperArm: 'right_upperarm',
+                leftForearm: 'left_forearm', rightForearm: 'right_forearm',
+                leftThigh: 'left_thigh', rightThigh: 'right_thigh',
+                leftLeg: 'left_calf', rightLeg: 'right_calf',
+            };
+            for (const [rigName, dataUrl] of Object.entries(rigData.imagePaths)) {
+                const partName = nameMap[rigName] || rigName;
+                parts.push({ name: partName, image: dataUrl });
+            }
+        }
+        renderPartsPanel();
+        await loadRigImages();
+        buildRigControls();
+        showRigThumb();
+        showCompareThumb();
+        document.getElementById('btnRegenRig').disabled = false;
+        setStatus('Rig loaded from file', 'done');
+    } catch (err) {
+        setStatus('Error loading rig: ' + err.message, 'error');
+    }
+}
+
 async function loadExistingRig() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            const text = await file.text();
-            rigData = JSON.parse(text);
-            // Extract parts from rig imagePaths
-            parts = [];
-            if (rigData.imagePaths) {
-                const nameMap = {
-                    head: 'head', torso: 'torso',
-                    leftUpperArm: 'left_upperarm', rightUpperArm: 'right_upperarm',
-                    leftForearm: 'left_forearm', rightForearm: 'right_forearm',
-                    leftThigh: 'left_thigh', rightThigh: 'right_thigh',
-                    leftLeg: 'left_calf', rightLeg: 'right_calf',
-                };
-                for (const [rigName, dataUrl] of Object.entries(rigData.imagePaths)) {
-                    const partName = nameMap[rigName] || rigName;
-                    parts.push({ name: partName, image: dataUrl });
-                }
-            }
-            renderPartsPanel();
-            await loadRigImages();
-            buildRigControls();
-            showRigThumb();
-            showCompareThumb();
-            document.getElementById('btnRegenRig').disabled = false;
-            setStatus('Rig loaded from file', 'done');
-        } catch (err) {
-            setStatus('Error loading rig: ' + err.message, 'error');
-        }
-    };
+    input.onchange = (e) => handleRigLoad(e.target.files[0]);
     input.click();
 }
 
@@ -217,6 +222,41 @@ function downloadRig() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
+}
+
+/* ── Cross-highlight ────────────────────────────────────────────── */
+const SNAKE_TO_CAMEL = {
+    head: 'head', torso: 'torso',
+    left_upperarm: 'leftUpperArm', right_upperarm: 'rightUpperArm',
+    left_forearm: 'leftForearm', right_forearm: 'rightForearm',
+    left_thigh: 'leftThigh', right_thigh: 'rightThigh',
+    left_calf: 'leftLeg', right_calf: 'rightLeg',
+};
+const CAMEL_TO_SNAKE = Object.fromEntries(Object.entries(SNAKE_TO_CAMEL).map(([k, v]) => [v, k]));
+
+function highlightPart(snakeName) {
+    const rigName = SNAKE_TO_CAMEL[snakeName] || snakeName;
+    highlightedPart = rigName;
+    highlightExpiry = performance.now() + 1200; // 1.2s flash
+
+    // Flash part items in the parts panel
+    document.querySelectorAll('.part-item').forEach(el => el.classList.remove('part-flash'));
+    const items = document.querySelectorAll('.part-item');
+    items.forEach(el => {
+        const label = el.querySelector('.part-label');
+        if (label && label.textContent === snakeName.replace(/_/g, ' ')) {
+            el.classList.add('part-flash');
+        }
+    });
+
+    // Flash matching z-index row
+    document.querySelectorAll('.zindex-row').forEach(el => el.classList.remove('zindex-flash'));
+    document.querySelectorAll('.zindex-row').forEach(el => {
+        const label = el.querySelector('.zindex-label');
+        if (label && label.textContent === rigName) {
+            el.classList.add('zindex-flash');
+        }
+    });
 }
 
 /* ── Parts Panel ────────────────────────────────────────────────── */
@@ -352,6 +392,7 @@ function selectPart(name) {
         undoStacks[selectedPart] = undoStack;
     }
     selectedPart = name;
+    highlightPart(name);
     renderPartsPanel();
     loadPartInEditor(name);
 }
@@ -751,21 +792,25 @@ function buildRigControls() {
         el.appendChild(sec);
     }
 
-    // Z-Index
+    // Z-Index (sorted layer list, highest = front)
     if (rigData.zIndexValues) {
-        const sec = createRigSection('Z-Index');
+        const sec = createRigSection('Z-Index (top = front)');
         const wrap = sec.querySelector('.rig-fields-wrap');
-        const row = document.createElement('div');
-        row.className = 'rig-fields';
-        for (const [name, val] of Object.entries(rigData.zIndexValues)) {
-            row.innerHTML += `
-                <div class="rig-field">
-                    <label>${name}</label>
-                    <input type="number" value="${val}" onchange="updateRigZ('${name}',this.value)">
-                </div>
+        const sorted = Object.entries(rigData.zIndexValues)
+            .sort((a, b) => b[1] - a[1]); // highest z first (front)
+        sorted.forEach(([name, val], i) => {
+            const row = document.createElement('div');
+            row.className = 'zindex-row';
+            row.innerHTML = `
+                <span class="zindex-label">${name}</span>
+                <input type="number" value="${val}" onchange="updateRigZ('${name}',this.value)">
+                <button class="zindex-btn" title="Bring forward" ${i === 0 ? 'disabled' : ''}
+                        onclick="moveZIndex('${name}',1)">&#9650;</button>
+                <button class="zindex-btn" title="Send backward" ${i === sorted.length - 1 ? 'disabled' : ''}
+                        onclick="moveZIndex('${name}',-1)">&#9660;</button>
             `;
-        }
-        wrap.appendChild(row);
+            wrap.appendChild(row);
+        });
         el.appendChild(sec);
     }
 
@@ -801,6 +846,14 @@ function updateRigJoint(name, prop, val) {
 function updateRigZ(name, val) {
     if (!rigData || !rigData.zIndexValues) return;
     rigData.zIndexValues[name] = parseInt(val);
+    buildRigControls(); // rebuild to re-sort the list
+    saveRig();
+}
+
+function moveZIndex(name, direction) {
+    if (!rigData || !rigData.zIndexValues) return;
+    rigData.zIndexValues[name] = (rigData.zIndexValues[name] || 0) + direction;
+    buildRigControls();
     saveRig();
 }
 
@@ -1141,6 +1194,11 @@ function renderPreview(timestamp) {
         }
     }
 
+    // Clear highlight if expired
+    const isHighlighting = highlightedPart && performance.now() < highlightExpiry;
+    // Pulse alpha: fade from 1 → 0 over the duration
+    const hlAlpha = isHighlighting ? Math.max(0, (highlightExpiry - performance.now()) / 1200) : 0;
+
     // Draw all objects — highlight hovered part in 'part' mode
     objects.forEach(obj => {
         if (!obj.img) return;
@@ -1154,7 +1212,18 @@ function renderPreview(timestamp) {
             ctx.shadowColor = '#e94560';
             ctx.shadowBlur = 10 / fitScale;
         }
+        // Cross-highlight glow
+        if (isHighlighting && obj.name === highlightedPart) {
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = (16 / fitScale) * hlAlpha;
+        }
         ctx.drawImage(obj.img, dx, dy, obj.w, obj.h);
+        // Draw highlight outline on top
+        if (isHighlighting && obj.name === highlightedPart) {
+            ctx.strokeStyle = `rgba(0, 229, 255, ${hlAlpha * 0.8})`;
+            ctx.lineWidth = 2 / fitScale;
+            ctx.strokeRect(dx, dy, obj.w, obj.h);
+        }
         ctx.restore();
     });
 
@@ -1309,8 +1378,18 @@ const PART_TO_PIVOT = {
 const previewCanvas = document.getElementById('previewCanvas');
 
 previewCanvas.addEventListener('mousedown', (e) => {
-    if (rigEditMode === 'view' || !rigData) return;
+    if (!rigData) return;
     const { vx, vy } = screenToVirtual(e, previewCanvas);
+
+    // In view mode, click a part to highlight + select it
+    if (rigEditMode === 'view') {
+        const partName = findPartUnderCursor(vx, vy);
+        if (partName) {
+            const snakeName = CAMEL_TO_SNAKE[partName] || partName;
+            selectPart(snakeName);
+        }
+        return;
+    }
 
     if (rigEditMode === 'pivot') {
         const hit = findNearestPivot(vx, vy);
@@ -1722,6 +1801,93 @@ async function loadRefCharacter(which) {
         refLoading[which] = false;
     }
 }
+
+/* ── Drag & Drop ────────────────────────────────────────────────── */
+function addDropTarget(el, opts) {
+    // opts: { accept: 'image'|'json'|'any', onDrop: (file) => void }
+    el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.add('drop-hover');
+    });
+    el.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove('drop-hover');
+    });
+    el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove('drop-hover');
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        if (opts.accept === 'image' && !file.type.startsWith('image/')) return;
+        if (opts.accept === 'json' && !file.name.endsWith('.json')) return;
+        opts.onDrop(file);
+    });
+}
+
+// Upload Image button — drop an image to upload
+addDropTarget(document.querySelector('.toolbar'), {
+    accept: 'image',
+    onDrop: (file) => handleImageUpload(file),
+});
+
+// Load rig.json button — drop a .json to load
+addDropTarget(document.getElementById('btnLoadRig'), {
+    accept: 'json',
+    onDrop: (file) => handleRigLoad(file),
+});
+
+// Part items — drop an image onto a part to replace it
+// (re-attached after each renderPartsPanel via MutationObserver)
+function attachPartDropTargets() {
+    document.querySelectorAll('.part-item').forEach(el => {
+        const label = el.querySelector('.part-label');
+        if (!label) return;
+        const name = label.textContent.replace(/ /g, '_');
+        addDropTarget(el, {
+            accept: 'image',
+            onDrop: (file) => {
+                // Reuse uploadPart logic with the dropped file
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const dataUrl = reader.result;
+                    let part = parts.find(p => p.name === name);
+                    if (part) { part.image = dataUrl; } else { parts.push({ name, image: dataUrl }); }
+                    if (rigData && rigData.imagePaths) {
+                        const rigName = SNAKE_TO_CAMEL[name];
+                        if (rigName) {
+                            rigData.imagePaths[rigName] = dataUrl;
+                            await loadRigImages();
+                        }
+                    }
+                    if (sessionId) {
+                        const form = new FormData();
+                        form.append('file', file);
+                        try { await fetch(`/api/parts/${name}?session_id=${sessionId}`, { method: 'PUT', body: form }); } catch (err) { console.warn('Failed to upload part:', err); }
+                    }
+                    delete undoStacks[name];
+                    renderPartsPanel();
+                    if (selectedPart === name) loadPartInEditor(name);
+                    setStatus(`Part "${name}" uploaded`, 'done');
+                };
+                reader.readAsDataURL(file);
+            },
+        });
+    });
+}
+
+// Re-attach drop targets whenever parts panel is re-rendered
+const _origRenderPartsPanel = renderPartsPanel;
+renderPartsPanel = function() {
+    _origRenderPartsPanel();
+    attachPartDropTargets();
+};
+
+// Prevent default browser drop behavior on the whole page
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
 
 /* ── Init ───────────────────────────────────────────────────────── */
 requestAnimationFrame(renderPreview);

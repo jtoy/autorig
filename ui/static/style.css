@@ -391,6 +391,67 @@ body {
     font-family: monospace;
 }
 
+/* Z-Index layer list */
+.zindex-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 3px;
+    margin-bottom: 1px;
+    background: rgba(255,255,255,0.03);
+}
+
+.zindex-row:hover {
+    background: rgba(255,255,255,0.07);
+}
+
+.zindex-label {
+    font-size: 11px;
+    color: #ccc;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.zindex-row input[type="number"] {
+    width: 48px;
+    padding: 2px 4px;
+    border: 1px solid #444;
+    border-radius: 2px;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-size: 11px;
+    font-family: monospace;
+    text-align: center;
+}
+
+.zindex-btn {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #444;
+    border-radius: 3px;
+    background: #222;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 20px;
+    text-align: center;
+}
+
+.zindex-btn:hover:not(:disabled) {
+    background: #0f3460;
+    color: #fff;
+}
+
+.zindex-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 /* Resize controls in editor */
 .resize-controls {
     display: flex;
@@ -540,6 +601,32 @@ body {
     background: #40b080;
     border-color: #40b080;
     color: white;
+}
+
+/* Cross-highlight flash animations */
+.part-item.part-flash {
+    animation: partFlash 1.2s ease-out;
+}
+
+.zindex-row.zindex-flash {
+    animation: zindexFlash 1.2s ease-out;
+}
+
+@keyframes partFlash {
+    0%   { background: rgba(0, 229, 255, 0.4); box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.5); }
+    100% { background: transparent; box-shadow: none; }
+}
+
+@keyframes zindexFlash {
+    0%   { background: rgba(0, 229, 255, 0.35); }
+    100% { background: rgba(255,255,255,0.03); }
+}
+
+/* Drag & drop hover */
+.drop-hover {
+    outline: 2px dashed #00e5ff !important;
+    outline-offset: -2px;
+    background: rgba(0, 229, 255, 0.1) !important;
 }
 
 /* Upload drop zone */
