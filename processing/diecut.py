@@ -41,13 +41,21 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: 
     """
     temperature = 0
     prompt = """
-    EXTRACT the character into 10 separate pieces on a white background: 
+    EXTRACT the character into 10 separate pieces on a white background:
     head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
     MUST be 10 EXACTLY.
     You have to put the pieces along the horizontal axis, with some spacing in between. As the example shows.
+
+    CRITICAL — arm and leg splitting:
+    - Each arm MUST be split into TWO separate pieces: upperarm (shoulder to elbow) and forearm (elbow to hand).
+    - The upperarm piece must NOT include the forearm or hand. Cut at the elbow joint.
+    - The forearm piece includes the forearm AND the hand.
+    - Each leg MUST be split into TWO separate pieces: thigh (hip to knee) and calf (knee to foot).
+    - Do NOT draw an entire arm as one piece. Each arm = 2 pieces.
+
     Keep the original position, style, line weight, proportions, and details EXACTLY as in the original image.
     Please keep attention to the hands. We do not have common fingers! Do not try to redraw or modify them.
-    
+
     Image 1 is the example of an input. Image 2 is the example of a good diecut, use it as a guide but not as a model. Image 3 is the input to process.
     """
 

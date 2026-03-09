@@ -32,12 +32,20 @@ def bboxes(client, inputPath, outputFolder, model: str = "gemini-3-flash-preview
     temperature = 0
     prompt = """
     Task: ONLY detect and return bounding boxes. Do not edit, redraw, or reinterpret the image.
-    Detect exactly these 10 parts of the figure: head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
+    This image contains 10 SEPARATED body-part pieces laid out on a white background.
+    Detect exactly these 10 parts: head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
+
+    CRITICAL arm/leg splitting rules:
+    - Each arm is TWO separate pieces: upperarm (shoulder to elbow) and forearm (elbow to hand/wrist).
+    - Each leg is TWO separate pieces: thigh (hip to knee) and calf (knee to foot).
+    - The upperarm box must ONLY contain the upper arm piece. It must NOT include the forearm or hand.
+    - The forearm box must ONLY contain the forearm piece. It must NOT include the upper arm.
+    - The thigh box must ONLY contain the thigh piece. It must NOT include the calf or foot.
+    - If a piece looks like the FULL arm (shoulder to hand), label it as upperarm and make the forearm box cover just the hand/lower portion.
+    - Boxes for upperarm and forearm should NOT significantly overlap.
+
     Return exactly 10 SEPARATE bounding boxes in [ymin, xmin, ymax, xmax] format normalized to 0-1000.
-    IF there are more but you have alredy detected 10, just ignore the rest.
-    Always choose the most complete box that contains the entire part.
     Output a JSON array of objects, each with 'box_2d' and 'label'.
-    Keep the original drawing exactly as-is: same pose, same fingers, same proportions, same design. No alterations.
     """
 
     if not os.path.exists(inputPath):
