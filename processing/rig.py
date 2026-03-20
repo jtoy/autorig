@@ -9,16 +9,20 @@ from google.genai import types
 
 
 PART_NAME_MAP = {
-    'head': 'head',
-    'torso': 'torso',
-    'left_upperarm': 'leftUpperArm',
-    'right_upperarm': 'rightUpperArm',
-    'left_forearm': 'leftForearm',
-    'right_forearm': 'rightForearm',
-    'left_thigh': 'leftThigh',
-    'right_thigh': 'rightThigh',
-    'left_calf': 'leftLeg',
-    'right_calf': 'rightLeg',
+    "head": "head",
+    "torso": "torso",
+    "left_upperarm": "leftUpperArm",
+    "right_upperarm": "rightUpperArm",
+    "left_forearm": "leftForearm",
+    "right_forearm": "rightForearm",
+    "left_hand": "leftHand",
+    "right_hand": "rightHand",
+    "left_thigh": "leftThigh",
+    "right_thigh": "rightThigh",
+    "left_calf": "leftLeg",
+    "right_calf": "rightLeg",
+    "left_foot": "leftFoot",
+    "right_foot": "rightFoot",
 }
 
 TANK_EXAMPLE = """{
@@ -29,10 +33,14 @@ TANK_EXAMPLE = """{
     "rightUpperArm": {"width": 83, "height": 203},
     "leftForearm": {"width": 58, "height": 135},
     "rightForearm": {"width": 59, "height": 137},
+    "leftHand": {"width": 45, "height": 50},
+    "rightHand": {"width": 45, "height": 50},
     "leftThigh": {"width": 111, "height": 198},
     "rightThigh": {"width": 80, "height": 166},
     "leftLeg": {"width": 184, "height": 137},
-    "rightLeg": {"width": 184, "height": 137}
+    "rightLeg": {"width": 184, "height": 137},
+    "leftFoot": {"width": 60, "height": 40},
+    "rightFoot": {"width": 60, "height": 40}
   },
   "pivotPoints": {
     "torso_head": {"x": 40, "y": -343},
@@ -42,8 +50,12 @@ TANK_EXAMPLE = """{
     "torso_rightThigh": {"x": 85, "y": -58},
     "leftUpperArm_leftForearm": {"x": 4, "y": 60},
     "rightUpperArm_rightForearm": {"x": -9, "y": 49},
+    "leftForearm_leftHand": {"x": 0, "y": 50},
+    "rightForearm_rightHand": {"x": 0, "y": 50},
     "leftThigh_leftLeg": {"x": 0, "y": 40},
-    "rightThigh_rightLeg": {"x": 9, "y": 36}
+    "rightThigh_rightLeg": {"x": 9, "y": 36},
+    "leftLeg_leftFoot": {"x": 0, "y": 30},
+    "rightLeg_rightFoot": {"x": 0, "y": 30}
   },
   "jointOffset": {
     "torso_head": {"x": 19, "y": 33},
@@ -53,15 +65,19 @@ TANK_EXAMPLE = """{
     "torso_rightThigh": {"x": 0, "y": 22},
     "leftUpperArm_leftForearm": {"x": 0, "y": 19},
     "rightUpperArm_rightForearm": {"x": 0, "y": 19},
+    "leftForearm_leftHand": {"x": 0, "y": 15},
+    "rightForearm_rightHand": {"x": 0, "y": 15},
     "leftThigh_leftLeg": {"x": 0, "y": 13},
-    "rightThigh_rightLeg": {"x": 0, "y": 13}
+    "rightThigh_rightLeg": {"x": 0, "y": 13},
+    "leftLeg_leftFoot": {"x": 0, "y": 10},
+    "rightLeg_rightFoot": {"x": 0, "y": 10}
   },
   "zIndexValues": {
     "head": 9, "torso": 8,
-    "leftUpperArm": 10, "leftForearm": 11,
-    "rightUpperArm": 1, "rightForearm": 2,
-    "leftThigh": 6, "leftLeg": 7,
-    "rightThigh": 4, "rightLeg": 5
+    "leftUpperArm": 10, "leftForearm": 11, "leftHand": 12,
+    "rightUpperArm": 1, "rightForearm": 2, "rightHand": 3,
+    "leftThigh": 6, "leftLeg": 7, "leftFoot": 13,
+    "rightThigh": 4, "rightLeg": 5, "rightFoot": 14
   }
 }"""
 
@@ -72,7 +88,7 @@ def _parse_json(text):
     lines = text.strip().splitlines()
     for i, line in enumerate(lines):
         if line.strip().startswith("```"):
-            text = "\n".join(lines[i + 1:])
+            text = "\n".join(lines[i + 1 :])
             text = text.split("```")[0]
             break
     return json.loads(text)
@@ -103,11 +119,12 @@ COORDINATE SYSTEM:
 - Torso anchor is at BOTTOM-CENTER (0.5, 1.0). Root transform = torso bottom-center.
 - pivotPoints are offsets FROM the root. Negative y = above root.
 - For torso_head: if neck is 40px from top of a 383px torso → pivot_y = -(383-40) = -343
-- For limb-to-limb (elbow/knee): pivot_y = parent_height - distance_from_top_to_joint
+- For limb-to-limb (elbow/knee/wrist/ankle): pivot_y = parent_height - distance_from_top_to_joint
 - jointOffset pushes child images to OVERLAP the parent at the joint. Must be generous (15-25% of child height) so parts connect seamlessly with NO visible gaps.
 - Target torso height: ~300px. Scale all other parts proportionally from the character image.
 - Upper arms/thighs typically 50-55% of torso height.
 - Forearms/calves typically 35-40% of torso height.
+- Hands/feet typically 15-20% of torso height.
 - Must fit 1000x1000 canvas (root at ~500,600).
 
 CRITICAL — ARM AND LEG PLACEMENT:
@@ -128,14 +145,14 @@ Note in the Tank reference:
 - You should aim for 0.45-0.55 of half-torso-width for shoulder x offsets.
 
 Look at the character image and determine:
-1. The CORRECT proportional dimensions of each body part (head, torso, arms, legs)
-2. Where joints connect (neck, shoulders, hips, elbows, knees)
+1. The CORRECT proportional dimensions of each body part (head, torso, arms, forearms, hands, thighs, calves, feet)
+2. Where joints connect (neck, shoulders, hips, elbows, wrists, knees, ankles)
 3. Generous joint offsets so assembled parts overlap seamlessly
 4. Shoulder pivots far enough out so arms are AT THE SIDES of the torso
 
 Return JSON with exactly these 4 keys: "dimensionValues", "pivotPoints", "jointOffset", "zIndexValues".
-Include all 10 parts: head, torso, leftUpperArm, rightUpperArm, leftForearm, rightForearm, leftThigh, rightThigh, leftLeg, rightLeg.
-Include all 9 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUpperArm, torso_leftThigh, torso_rightThigh, leftUpperArm_leftForearm, rightUpperArm_rightForearm, leftThigh_leftLeg, rightThigh_rightLeg."""
+Include all 14 parts: head, torso, leftUpperArm, rightUpperArm, leftForearm, rightForearm, leftHand, rightHand, leftThigh, rightThigh, leftLeg, rightLeg, leftFoot, rightFoot.
+Include all 13 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUpperArm, torso_leftThigh, torso_rightThigh, leftUpperArm_leftForearm, rightUpperArm_rightForearm, leftForearm_leftHand, rightForearm_rightHand, leftThigh_leftLeg, rightThigh_rightLeg, leftLeg_leftFoot, rightLeg_rightFoot."""
 
     print(f"[rig] Generating rig params with {model} for {ow}x{oh}px image...")
     response = client.models.generate_content(
@@ -144,15 +161,19 @@ Include all 9 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightUp
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0,
-        )
+        ),
     )
     result = _parse_json(response.text)
-    print(f"[rig] Got params: {len(result.get('dimensionValues', {}))} dimensions, "
-          f"{len(result.get('pivotPoints', {}))} pivots")
+    print(
+        f"[rig] Got params: {len(result.get('dimensionValues', {}))} dimensions, "
+        f"{len(result.get('pivotPoints', {}))} pivots"
+    )
     return result
 
 
-def rig(client, original_image_path, parts_dir, output_path, model: str = "gemini-2.5-flash"):
+def rig(
+    client, original_image_path, parts_dir, output_path, model: str = "gemini-2.5-flash"
+):
     """
     Generate a distark rig JSON from die-cut body parts.
 
@@ -169,8 +190,8 @@ def rig(client, original_image_path, parts_dir, output_path, model: str = "gemin
             img = Image.open(path).convert("RGBA")
             trimmed = trim_transparent(img)
             buf = io.BytesIO()
-            trimmed.save(buf, format='PNG')
-            b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+            trimmed.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
             image_paths[rig_name] = f"data:image/png;base64,{b64}"
 
     print(f"Found {len(image_paths)} parts: {list(image_paths.keys())}")
@@ -179,100 +200,130 @@ def rig(client, original_image_path, parts_dir, output_path, model: str = "gemin
     print("Asking Gemini to analyze original image for rig parameters...")
     params = generate_rig_params(client, original_image_path, model=model)
 
-    dims = params['dimensionValues']
-    pivot_points = params['pivotPoints']
-    joint_offset = params['jointOffset']
-    z_index_values = params['zIndexValues']
+    dims = params["dimensionValues"]
+    pivot_points = params["pivotPoints"]
+    joint_offset = params["jointOffset"]
+    z_index_values = params["zIndexValues"]
 
     # Post-process: ensure shoulder pivots are far enough out that arms are
     # visible at the sides. The behind-arm (low z-index) must extend past
     # the torso edge to be visible.
-    torso_w = dims['torso']['width']
+    torso_w = dims["torso"]["width"]
     half_w = torso_w / 2.0
     min_shoulder_ratio = 0.85  # arms near outer edges of torso
 
-    for key, sign in [('torso_leftUpperArm', -1), ('torso_rightUpperArm', 1)]:
+    for key, sign in [("torso_leftUpperArm", -1), ("torso_rightUpperArm", 1)]:
         if key in pivot_points:
-            current_x = pivot_points[key]['x']
+            current_x = pivot_points[key]["x"]
             min_x = sign * half_w * min_shoulder_ratio
             if abs(current_x) < abs(min_x):
-                print(f"Adjusting {key} x from {current_x} to {round(min_x)} (was too centered)")
-                pivot_points[key]['x'] = round(min_x)
+                print(
+                    f"Adjusting {key} x from {current_x} to {round(min_x)} (was too centered)"
+                )
+                pivot_points[key]["x"] = round(min_x)
 
     # Post-process: ensure joint offsets are generous enough for seamless assembly
     # Minimum y-offset as fraction of child height
     min_joint_y_ratios = {
-        'torso_head': 0.10,
-        'torso_leftUpperArm': 0.25,
-        'torso_rightUpperArm': 0.25,
-        'torso_leftThigh': 0.20,
-        'torso_rightThigh': 0.20,
-        'leftUpperArm_leftForearm': 0.20,
-        'rightUpperArm_rightForearm': 0.20,
-        'leftThigh_leftLeg': 0.15,
-        'rightThigh_rightLeg': 0.15,
+        "torso_head": 0.10,
+        "torso_leftUpperArm": 0.25,
+        "torso_rightUpperArm": 0.25,
+        "torso_leftThigh": 0.20,
+        "torso_rightThigh": 0.20,
+        "leftUpperArm_leftForearm": 0.20,
+        "rightUpperArm_rightForearm": 0.20,
+        "leftForearm_leftHand": 0.15,
+        "rightForearm_rightHand": 0.15,
+        "leftThigh_leftLeg": 0.15,
+        "rightThigh_rightLeg": 0.15,
+        "leftLeg_leftFoot": 0.10,
+        "rightLeg_rightFoot": 0.10,
     }
     # Map joint keys to the child part for height lookup
     joint_child_map = {
-        'torso_head': 'head',
-        'torso_leftUpperArm': 'leftUpperArm',
-        'torso_rightUpperArm': 'rightUpperArm',
-        'torso_leftThigh': 'leftThigh',
-        'torso_rightThigh': 'rightThigh',
-        'leftUpperArm_leftForearm': 'leftForearm',
-        'rightUpperArm_rightForearm': 'rightForearm',
-        'leftThigh_leftLeg': 'leftLeg',
-        'rightThigh_rightLeg': 'rightLeg',
+        "torso_head": "head",
+        "torso_leftUpperArm": "leftUpperArm",
+        "torso_rightUpperArm": "rightUpperArm",
+        "torso_leftThigh": "leftThigh",
+        "torso_rightThigh": "rightThigh",
+        "leftUpperArm_leftForearm": "leftForearm",
+        "rightUpperArm_rightForearm": "rightForearm",
+        "leftForearm_leftHand": "leftHand",
+        "rightForearm_rightHand": "rightHand",
+        "leftThigh_leftLeg": "leftLeg",
+        "rightThigh_rightLeg": "rightLeg",
+        "leftLeg_leftFoot": "leftFoot",
+        "rightLeg_rightFoot": "rightFoot",
     }
     for jkey, min_ratio in min_joint_y_ratios.items():
         if jkey in joint_offset and jkey in joint_child_map:
             child = joint_child_map[jkey]
             if child in dims:
-                child_h = dims[child]['height']
+                child_h = dims[child]["height"]
                 min_y = int(child_h * min_ratio)
-                if joint_offset[jkey]['y'] < min_y:
-                    print(f"Adjusting {jkey} jointOffset y from {joint_offset[jkey]['y']} to {min_y}")
-                    joint_offset[jkey]['y'] = min_y
+                if joint_offset[jkey]["y"] < min_y:
+                    print(
+                        f"Adjusting {jkey} jointOffset y from {joint_offset[jkey]['y']} to {min_y}"
+                    )
+                    joint_offset[jkey]["y"] = min_y
 
     print(f"Dimensions: {json.dumps(dims, indent=2)}")
 
     # Step 3: Fixed rotation/selfRotation values
     rotation_values = {
-        'head': 0.0, 'torso': 0.0,
-        'leftUpperArm': -3.14159265358979, 'rightUpperArm': 3.14159265358979,
-        'leftForearm': 0.0, 'rightForearm': 0.0,
-        'leftThigh': -3.14159265358979, 'rightThigh': 3.14159265358979,
-        'leftLeg': 0.0, 'rightLeg': 0.0,
+        "head": 0.0,
+        "torso": 0.0,
+        "leftUpperArm": -3.14159265358979,
+        "rightUpperArm": 3.14159265358979,
+        "leftForearm": 0.0,
+        "rightForearm": 0.0,
+        "leftHand": 0.0,
+        "rightHand": 0.0,
+        "leftThigh": -3.14159265358979,
+        "rightThigh": 3.14159265358979,
+        "leftLeg": 0.0,
+        "rightLeg": 0.0,
+        "leftFoot": 0.0,
+        "rightFoot": 0.0,
     }
     self_rotation_values = {
-        'head': 0.0, 'torso': 0.0,
-        'leftUpperArm': -3.14, 'rightUpperArm': -3.14,
-        'leftForearm': -3.14, 'rightForearm': -3.14,
-        'leftThigh': -3.14, 'rightThigh': -3.14,
-        'leftLeg': -3.14, 'rightLeg': -3.14,
+        "head": 0.0,
+        "torso": 0.0,
+        "leftUpperArm": -3.14,
+        "rightUpperArm": -3.14,
+        "leftForearm": -3.14,
+        "rightForearm": -3.14,
+        "leftHand": -3.14,
+        "rightHand": -3.14,
+        "leftThigh": -3.14,
+        "rightThigh": -3.14,
+        "leftLeg": -3.14,
+        "rightLeg": -3.14,
+        "leftFoot": -3.14,
+        "rightFoot": -3.14,
     }
 
     # Step 4: Hide parts not produced by turtlediecutter
     visibility = {}
-    for name in ['leftHand', 'rightHand', 'mouth']:
+    for name in ["mouth"]:
         if name not in image_paths:
             visibility[name] = False
 
     # Step 5: Assemble rig JSON
     rig_data = {
-        'kind': 'character',
-        'imageScale': 1,
-        'imagePaths': image_paths,
-        'dimensionValues': dims,
-        'rotationValues': rotation_values,
-        'selfRotationValues': self_rotation_values,
-        'pivotPoints': pivot_points,
-        'jointOffset': joint_offset,
-        'zIndexValues': z_index_values,
-        'visibility': visibility,
+        "kind": "character",
+        "imageScale": 1,
+        "imagePaths": image_paths,
+        "dimensionValues": dims,
+        "rotationValues": rotation_values,
+        "selfRotationValues": self_rotation_values,
+        "pivotPoints": pivot_points,
+        "jointOffset": joint_offset,
+        "zIndexValues": z_index_values,
+        "visibility": visibility,
     }
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(rig_data, f, indent=2)
 
     print(f"Rig saved to {output_path}")
@@ -333,7 +384,7 @@ def validate_rig(rig_path, original_image_path=None):
         report = None
 
     # 2. render — generate a PNG so the user can review
-    render_path = rig_path.rsplit('.', 1)[0] + '.png'
+    render_path = rig_path.rsplit(".", 1)[0] + ".png"
     try:
         result = subprocess.run(
             [cmd, "render", rig_path, "-o", render_path],

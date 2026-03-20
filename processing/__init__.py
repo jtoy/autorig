@@ -1,4 +1,4 @@
-from .diecut import diecut
+from .diecut import diecut, detect_sides
 from .bboxes import bboxes
 from .background import change_background
 from .alpha import change_alpha

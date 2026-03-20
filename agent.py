@@ -25,8 +25,9 @@ class DiecutTool(BaseTool):
     name: str = "diecut"
     description: str = (
         "Create a single composite diecut image that preserves the original pose and proportions, "
-        "with the character cleanly separated into these 10 parts in the same image: "
-        "head, torso, right_arm, left_arm, right_forearm, left_forearm, right_thigh, left_thigh, right_leg, left_leg. "
+        "with the character cleanly separated into these 14 parts in the same image: "
+        "head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_hand, left_hand, "
+        "right_thigh, left_thigh, right_calf, left_calf, right_foot, left_foot. "
         "Input: image_path. Output: diecut composite saved to output_path."
     )
     args_schema: Type[BaseModel] = DiecutInput
@@ -45,9 +46,10 @@ class BboxesInput(BaseModel):
 class BboxesTool(BaseTool):
     name: str = "bboxes"
     description: str = (
-        "Detects exactly 10 body parts in the given image and writes PNG crops into output_folder. "
-        "Output filenames are the labels in English: head, torso, right_arm, left_arm, right_forearm, "
-        "left_forearm, right_thigh, left_thigh, right_leg, left_leg (e.g., head.png)."
+        "Detects exactly 14 body parts in the given image and writes PNG crops into output_folder. "
+        "Output filenames are the labels in English: head, torso, right_upperarm, left_upperarm, "
+        "right_forearm, left_forearm, right_hand, left_hand, right_thigh, left_thigh, right_calf, "
+        "left_calf, right_foot, left_foot (e.g., head.png, right_hand.png)."
     )
     args_schema: Type[BaseModel] = BboxesInput
 

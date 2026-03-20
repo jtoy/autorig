@@ -1,6 +1,7 @@
 """FastAPI server for the auto-rig UI."""
 
 import dotenv
+
 dotenv.load_dotenv()
 
 import asyncio
@@ -34,9 +35,13 @@ def check_auth(credentials: HTTPBasicCredentials = Depends(security)):
     correct_user = hmac.compare_digest(credentials.username, AUTH_USER)
     correct_pass = hmac.compare_digest(credentials.password, AUTH_PASS)
     if not (correct_user and correct_pass):
-        raise HTTPException(status_code=401, detail="Unauthorized",
-                            headers={"WWW-Authenticate": "Basic"})
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     return credentials.username
+
 
 # Add parent dir to path so we can import processing modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -56,11 +61,20 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 sessions = {}
 
 PART_NAMES = [
-    "head", "torso",
-    "left_upperarm", "right_upperarm",
-    "left_forearm", "right_forearm",
-    "left_thigh", "right_thigh",
-    "left_calf", "right_calf",
+    "head",
+    "torso",
+    "left_upperarm",
+    "right_upperarm",
+    "left_forearm",
+    "right_forearm",
+    "left_hand",
+    "right_hand",
+    "left_thigh",
+    "right_thigh",
+    "left_calf",
+    "right_calf",
+    "left_foot",
+    "right_foot",
 ]
 
 
@@ -123,7 +137,12 @@ async def upload_image(file: UploadFile = File(...), session_id: str = ""):
 
 
 @app.post("/api/diecut")
-async def run_diecut(session_id: str, rounds: int = 5, diecut_model: Optional[str] = None, vision_model: Optional[str] = None):
+async def run_diecut(
+    session_id: str,
+    rounds: int = 5,
+    diecut_model: Optional[str] = None,
+    vision_model: Optional[str] = None,
+):
     session = get_session(session_id)
     if not session["image_path"]:
         raise HTTPException(status_code=400, detail="No image uploaded")
@@ -140,10 +159,14 @@ async def run_diecut(session_id: str, rounds: int = 5, diecut_model: Optional[st
     try:
         client = genai.Client()
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None, lambda: diecut(client, session["image_path"], diecut_path, False, rounds, **kwargs),
+        side_map = await loop.run_in_executor(
+            None,
+            lambda: diecut(
+                client, session["image_path"], diecut_path, False, rounds, **kwargs
+            ),
         )
         session["diecut_path"] = diecut_path
+        session["side_map"] = side_map
         session["status"] = "diecut_done"
 
         with open(diecut_path, "rb") as f:
@@ -174,8 +197,12 @@ async def run_bboxes(session_id: str, vision_model: Optional[str] = None):
     try:
         client = genai.Client()
         loop = asyncio.get_event_loop()
+        side_map = session.get("side_map")
         await loop.run_in_executor(
-            None, lambda: bboxes(client, session["diecut_path"], parts_dir, **kwargs),
+            None,
+            lambda: bboxes(
+                client, session["diecut_path"], parts_dir, side_map=side_map, **kwargs
+            ),
         )
         session["parts_dir"] = parts_dir
         session["status"] = "bboxes_done"
@@ -226,7 +253,9 @@ async def run_rig(session_id: str, rig_model: Optional[str] = None):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
-            lambda: rig(client, session["image_path"], session["parts_dir"], rig_path, **kwargs),
+            lambda: rig(
+                client, session["image_path"], session["parts_dir"], rig_path, **kwargs
+            ),
         )
         session["rig_path"] = rig_path
         session["status"] = "rig_done"
@@ -240,14 +269,22 @@ async def run_rig(session_id: str, rig_model: Optional[str] = None):
 
 
 @app.post("/api/run-all")
-async def run_all(session_id: str, rounds: int = 5, diecut_model: Optional[str] = None, vision_model: Optional[str] = None, rig_model: Optional[str] = None):
+async def run_all(
+    session_id: str,
+    rounds: int = 5,
+    diecut_model: Optional[str] = None,
+    vision_model: Optional[str] = None,
+    rig_model: Optional[str] = None,
+):
     """Run the full pipeline: diecut → bboxes → bg removal → rig."""
     session = get_session(session_id)
     if not session["image_path"]:
         raise HTTPException(status_code=400, detail="No image uploaded")
 
     results = {}
-    print(f"[pipeline] Starting full pipeline (rounds={rounds}) for session {session_id}")
+    print(
+        f"[pipeline] Starting full pipeline (rounds={rounds}) for session {session_id}"
+    )
 
     diecut_kwargs = {}
     if diecut_model:
@@ -267,13 +304,23 @@ async def run_all(session_id: str, rounds: int = 5, diecut_model: Optional[str] 
     print("[pipeline] Step 1/4: Diecut")
     session["status"] = "running_diecut"
     diecut_path = os.path.join(session["work_dir"], "diecut.png")
+    side_map = None
     try:
         client = genai.Client()
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None, lambda: diecut(client, session["image_path"], diecut_path, False, rounds, **diecut_kwargs),
+        side_map = await loop.run_in_executor(
+            None,
+            lambda: diecut(
+                client,
+                session["image_path"],
+                diecut_path,
+                False,
+                rounds,
+                **diecut_kwargs,
+            ),
         )
         session["diecut_path"] = diecut_path
+        session["side_map"] = side_map
         results["diecut"] = "done"
         print("[pipeline] Step 1/4: Diecut done")
     except Exception as e:
@@ -287,7 +334,14 @@ async def run_all(session_id: str, rounds: int = 5, diecut_model: Optional[str] 
     os.makedirs(parts_dir, exist_ok=True)
     try:
         await loop.run_in_executor(
-            None, lambda: bboxes(client, session["diecut_path"], parts_dir, **bbox_kwargs),
+            None,
+            lambda: bboxes(
+                client,
+                session["diecut_path"],
+                parts_dir,
+                side_map=side_map,
+                **bbox_kwargs,
+            ),
         )
         session["parts_dir"] = parts_dir
         results["bboxes"] = "done"
@@ -303,16 +357,12 @@ async def run_all(session_id: str, rounds: int = 5, diecut_model: Optional[str] 
         for name in PART_NAMES:
             path = os.path.join(parts_dir, f"{name}.png")
             if os.path.exists(path):
-                await loop.run_in_executor(
-                    None, remove_background_simple, path, 30
-                )
+                await loop.run_in_executor(None, remove_background_simple, path, 30)
         results["bg_removal"] = "done"
         print("[pipeline] Step 3/4: Background removal done")
     except Exception as e:
         session["status"] = "bg_removal_error"
-        raise HTTPException(
-            status_code=500, detail=f"Background removal failed: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Background removal failed: {e}")
 
     # Step 4: Rig generation
     print("[pipeline] Step 4/4: Rig generation")
@@ -321,7 +371,13 @@ async def run_all(session_id: str, rounds: int = 5, diecut_model: Optional[str] 
     try:
         await loop.run_in_executor(
             None,
-            lambda: rig(client, session["image_path"], session["parts_dir"], rig_path, **rig_kwargs),
+            lambda: rig(
+                client,
+                session["image_path"],
+                session["parts_dir"],
+                rig_path,
+                **rig_kwargs,
+            ),
         )
         session["rig_path"] = rig_path
         results["rig"] = "done"
@@ -421,7 +477,9 @@ async def regenerate_rig(session_id: str, rig_model: Optional[str] = None):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
-            lambda: rig(client, session["image_path"], session["parts_dir"], rig_path, **kwargs),
+            lambda: rig(
+                client, session["image_path"], session["parts_dir"], rig_path, **kwargs
+            ),
         )
         session["rig_path"] = rig_path
         with open(rig_path, "r") as f:
@@ -439,14 +497,16 @@ def _list_parts(parts_dir):
         if os.path.exists(path):
             with open(path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode("ascii")
-            parts.append({
-                "name": name,
-                "image": f"data:image/png;base64,{b64}",
-            })
+            parts.append(
+                {
+                    "name": name,
+                    "image": f"data:image/png;base64,{b64}",
+                }
+            )
     return parts
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8888)
