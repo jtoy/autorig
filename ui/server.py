@@ -159,14 +159,13 @@ async def run_diecut(
     try:
         client = genai.Client()
         loop = asyncio.get_event_loop()
-        side_map = await loop.run_in_executor(
+        await loop.run_in_executor(
             None,
             lambda: diecut(
                 client, session["image_path"], diecut_path, False, rounds, **kwargs
             ),
         )
         session["diecut_path"] = diecut_path
-        session["side_map"] = side_map
         session["status"] = "diecut_done"
 
         with open(diecut_path, "rb") as f:
@@ -197,12 +196,9 @@ async def run_bboxes(session_id: str, vision_model: Optional[str] = None):
     try:
         client = genai.Client()
         loop = asyncio.get_event_loop()
-        side_map = session.get("side_map")
         await loop.run_in_executor(
             None,
-            lambda: bboxes(
-                client, session["diecut_path"], parts_dir, side_map=side_map, **kwargs
-            ),
+            lambda: bboxes(client, session["diecut_path"], parts_dir, **kwargs),
         )
         session["parts_dir"] = parts_dir
         session["status"] = "bboxes_done"
@@ -304,11 +300,10 @@ async def run_all(
     print("[pipeline] Step 1/4: Diecut")
     session["status"] = "running_diecut"
     diecut_path = os.path.join(session["work_dir"], "diecut.png")
-    side_map = None
     try:
         client = genai.Client()
         loop = asyncio.get_event_loop()
-        side_map = await loop.run_in_executor(
+        await loop.run_in_executor(
             None,
             lambda: diecut(
                 client,
@@ -320,7 +315,6 @@ async def run_all(
             ),
         )
         session["diecut_path"] = diecut_path
-        session["side_map"] = side_map
         results["diecut"] = "done"
         print("[pipeline] Step 1/4: Diecut done")
     except Exception as e:
@@ -339,7 +333,6 @@ async def run_all(
                 client,
                 session["diecut_path"],
                 parts_dir,
-                side_map=side_map,
                 **bbox_kwargs,
             ),
         )

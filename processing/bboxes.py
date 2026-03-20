@@ -16,21 +16,17 @@ def parse_json(json_output: str) -> str:
     return json_output
 
 
-def bboxes(
-    client, inputPath, outputFolder, side_map=None, model="gemini-3-flash-preview"
-):
+def bboxes(client, inputPath, outputFolder, model="gemini-3-flash-preview"):
     """
     Detects 14 parts of a figure and saves crops to outputFolder.
 
     Left/right for paired parts (arms, legs) is assigned purely by x-position
     in the image: the box with smaller center-x becomes left_*, the other right_*.
-    The *side_map* parameter is unused and kept for API compatibility.
 
     Args:
         client: The Google GenAI client instance.
         inputPath: Path to the input image file.
         outputFolder: Path where the cropped images will be saved.
-        side_map: Unused; left/right are derived from box positions only.
         model: Model to use for bounding box detection.
     """
     temperature = 0
@@ -87,7 +83,7 @@ def bboxes(
     PAIRED_BASES = ("upperarm", "forearm", "hand", "thigh", "calf", "foot")
 
     # Resolve labels: for paired parts, assign left/right purely by x-position
-    # (smaller x = left_*, larger x = right_*) so we don't depend on model side_map.
+    # (smaller x = left_*, larger x = right_*).
     labeled = []
     for i, item in enumerate(items):
         label = item.get("label", f"part_{i}").replace(" ", "_").lower()
