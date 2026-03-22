@@ -7,20 +7,20 @@ from PIL import Image
 
 JUDGE_CRITERIA = [
     ("part_count",
-     "Are there exactly 10 separate body parts visible in the diecut image? "
+     "Are there exactly 14 separate body parts visible in the diecut image? "
      "Count each distinct piece carefully. The expected parts are: head, torso, "
-     "right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, "
-     "left_thigh, right_calf, left_calf."),
+     "right_upperarm, left_upperarm, right_forearm, left_forearm, right_hand, left_hand, "
+     "right_thigh, left_thigh, right_calf, left_calf, right_foot, left_foot."),
     ("segmentation",
-     "Are the arms properly split into upper arms and forearms as separate pieces? "
-     "Are the legs properly split into thighs and calves as separate pieces? "
-     "Each limb must be two distinct parts, not one combined piece."),
+     "Are the arms properly split into upper arms, forearms, and hands as separate pieces? "
+     "Are the legs properly split into thighs, calves, and feet as separate pieces? "
+     "Each arm must be three distinct parts, each leg must be three distinct parts."),
     ("style_fidelity",
      "Does the diecut preserve the original art style, line weights, colors, "
      "and proportions? Is it a faithful extraction from the original rather than "
      "a redrawn or vectorized version?"),
     ("detail_preservation",
-     "Are hands, facial features, and small details unchanged from the original image? "
+     "Are hands, feet, facial features, and small details unchanged from the original image? "
      "No added fingers, redrawn features, or modified details?"),
     ("layout",
      "Are all parts arranged horizontally in a row with clear spacing between them, "
@@ -41,26 +41,22 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: 
     """
     temperature = 0
     prompt = """
-    EXTRACT the character into 10 separate pieces on a white background:
-    head, torso, right_upperarm, left_upperarm, right_forearm, left_forearm, right_thigh, left_thigh, right_calf, left_calf.
-    MUST be 10 EXACTLY.
-    You have to put the pieces along the horizontal axis, with some spacing in between. As the example shows.
+    EXTRACT the character into 14 separate pieces on white background.
+    14 pieces: head, torso, 2 upper arms, 2 forearms, 2 hands, 2 thighs, 2 calves, 2 feet.
 
-    CRITICAL — arm and leg splitting:
-    - Each arm MUST be split into TWO separate pieces: upperarm (shoulder to elbow) and forearm (elbow to hand).
-    - The upperarm piece must NOT include the forearm or hand. Cut at the elbow joint.
-    - The forearm piece includes the forearm AND the hand.
-    - Each leg MUST be split into TWO separate pieces: thigh (hip to knee) and calf (knee to foot).
-    - Do NOT draw an entire arm as one piece. Each arm = 2 pieces.
+    CRITICAL:
+    - Keep pieces in their ORIGINAL POSITIONS with small gaps at joints.
+    - Each arm = 3 pieces (upperarm, forearm, hand). Cut at shoulder, elbow, wrist.
+    - Each leg = 3 pieces (thigh, calf, foot). Cut at hip, knee, ankle.
+    - Preserve original style, proportions, and details exactly.
+    - Do NOT redraw hands or feet.
+    - Layout: keep each part on the same side of the canvas as in the original (left-side parts toward the left, right-side parts toward the right) so position (x) consistently indicates which side each piece is on.
 
-    Keep the original position, style, line weight, proportions, and details EXACTLY as in the original image.
-    Please keep attention to the hands. We do not have common fingers! Do not try to redraw or modify them.
-
-    Image 1 is the example of an input. Image 2 is the example of a good diecut, use it as a guide but not as a model. Image 3 is the input to process.
+    Image 1 = example input. Image 2 = example output. Image 3 = process this.
     """
 
     if not os.path.exists(imagePath):
-       raise FileNotFoundError(f"Image file not found: {imagePath}")
+        raise FileNotFoundError(f"Image file not found: {imagePath}")
 
     # Load zero-shot examples
     example_input_path = os.path.join(os.path.dirname(__file__), "..", "resources", "tobyturtle.png")
@@ -215,7 +211,10 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: 
     output_image = Image.open(io.BytesIO(best_bytes))
     output_image.save(outputPath)
 
+    # Left/right are assigned by x-position in the bboxes step; no side_map needed.
     if best_score < 5 and fail_on_review:
         raise ValueError(
             f"Visual verification failed (best: {best_score}/5): {best[1]}"
         )
+
+    return None

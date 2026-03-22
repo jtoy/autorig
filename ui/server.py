@@ -59,8 +59,10 @@ PART_NAMES = [
     "head", "torso",
     "left_upperarm", "right_upperarm",
     "left_forearm", "right_forearm",
+    "left_hand", "right_hand",
     "left_thigh", "right_thigh",
     "left_calf", "right_calf",
+    "left_foot", "right_foot",
 ]
 
 
@@ -449,4 +451,4 @@ def _list_parts(parts_dir):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8888)

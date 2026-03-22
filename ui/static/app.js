@@ -183,8 +183,10 @@ async function handleRigLoad(file) {
                 head: 'head', torso: 'torso',
                 leftUpperArm: 'left_upperarm', rightUpperArm: 'right_upperarm',
                 leftForearm: 'left_forearm', rightForearm: 'right_forearm',
+                leftHand: 'left_hand', rightHand: 'right_hand',
                 leftThigh: 'left_thigh', rightThigh: 'right_thigh',
                 leftLeg: 'left_calf', rightLeg: 'right_calf',
+                leftFoot: 'left_foot', rightFoot: 'right_foot',
             };
             for (const [rigName, dataUrl] of Object.entries(rigData.imagePaths)) {
                 const partName = nameMap[rigName] || rigName;
@@ -229,8 +231,10 @@ const SNAKE_TO_CAMEL = {
     head: 'head', torso: 'torso',
     left_upperarm: 'leftUpperArm', right_upperarm: 'rightUpperArm',
     left_forearm: 'leftForearm', right_forearm: 'rightForearm',
+    left_hand: 'leftHand', right_hand: 'rightHand',
     left_thigh: 'leftThigh', right_thigh: 'rightThigh',
     left_calf: 'leftLeg', right_calf: 'rightLeg',
+    left_foot: 'leftFoot', right_foot: 'rightFoot',
 };
 const CAMEL_TO_SNAKE = Object.fromEntries(Object.entries(SNAKE_TO_CAMEL).map(([k, v]) => [v, k]));
 
@@ -264,8 +268,10 @@ const ALL_PART_NAMES = [
     'head', 'torso',
     'left_upperarm', 'right_upperarm',
     'left_forearm', 'right_forearm',
+    'left_hand', 'right_hand',
     'left_thigh', 'right_thigh',
     'left_calf', 'right_calf',
+    'left_foot', 'right_foot',
 ];
 
 function renderPartsPanel() {
@@ -353,8 +359,10 @@ function uploadPart(name) {
                 head: 'head', torso: 'torso',
                 left_upperarm: 'leftUpperArm', right_upperarm: 'rightUpperArm',
                 left_forearm: 'leftForearm', right_forearm: 'rightForearm',
+                left_hand: 'leftHand', right_hand: 'rightHand',
                 left_thigh: 'leftThigh', right_thigh: 'rightThigh',
                 left_calf: 'leftLeg', right_calf: 'rightLeg',
+                left_foot: 'leftFoot', right_foot: 'rightFoot',
             };
             const rigName = rigNameMap[name];
             if (rigName) {
@@ -600,8 +608,10 @@ async function editorSave() {
             head: 'head', torso: 'torso',
             left_upperarm: 'leftUpperArm', right_upperarm: 'rightUpperArm',
             left_forearm: 'leftForearm', right_forearm: 'rightForearm',
+            left_hand: 'leftHand', right_hand: 'rightHand',
             left_thigh: 'leftThigh', right_thigh: 'rightThigh',
             left_calf: 'leftLeg', right_calf: 'rightLeg',
+            left_foot: 'leftFoot', right_foot: 'rightFoot',
         };
         const rigName = rigNameMap[selectedPart];
         if (rigName) {
@@ -655,8 +665,10 @@ function resizePart() {
             head: 'head', torso: 'torso',
             left_upperarm: 'leftUpperArm', right_upperarm: 'rightUpperArm',
             left_forearm: 'leftForearm', right_forearm: 'rightForearm',
+            left_hand: 'leftHand', right_hand: 'rightHand',
             left_thigh: 'leftThigh', right_thigh: 'rightThigh',
             left_calf: 'leftLeg', right_calf: 'rightLeg',
+            left_foot: 'leftFoot', right_foot: 'rightFoot',
         };
         const rn = rigNameMap[selectedPart];
         if (rn && rigData.dimensionValues[rn]) {
@@ -993,9 +1005,10 @@ function computeRig(rig) {
         });
     }
 
-    // Arms and legs — matches distark_render's per-limb chain exactly
+    // Arms and legs — 3-part chains (upper → middle → end)
     function addChain(parentPivotKey, upperName, upperImgKey,
-                      elbowPivotKey, lowerName, lowerImgKey) {
+                      middlePivotKey, middleName, middleImgKey,
+                      endPivotKey, endName, endImgKey) {
         // Compute parent pivot world position (torso → upper limb)
         const pivot = pivotPoints[parentPivotKey] || { x: 0, y: 0 };
         const parentPivotWorld = applyTransform(root, {
@@ -1011,7 +1024,7 @@ function computeRig(rig) {
             const limbRot = rotations[upperName] || 0;
             const selfRot = selfRotations[upperName] || 0;
 
-            // Step 1: root → shoulder joint (with limb rotation)
+            // Step 1: root → shoulder/hip joint (with limb rotation)
             const parentT = applyTransform(root, {
                 x: pivot.x || 0, y: pivot.y || 0,
                 rotation: limbRot, scaleX: 1, scaleY: 1,
@@ -1029,52 +1042,92 @@ function computeRig(rig) {
                 img: loadedImages[upperImgKey || upperName],
             });
 
-            // Compute elbow/knee pivot world position (upper → lower limb)
+            // Compute elbow/knee pivot world position (upper → middle limb)
             const upperH = (dimensions[upperName]?.height || 50);
-            const ePivot = pivotPoints[elbowPivotKey] || { x: 0, y: 0 };
-            const elbowBase = applyTransform(parentT, {
-                x: ePivot.x || 0, y: (ePivot.y || 0) - upperH,
+            const mPivot = pivotPoints[middlePivotKey] || { x: 0, y: 0 };
+            const middleBase = applyTransform(parentT, {
+                x: mPivot.x || 0, y: (mPivot.y || 0) - upperH,
                 rotation: 0, scaleX: 1, scaleY: 1,
             });
-            computedPivots[elbowPivotKey] = { x: elbowBase.x, y: elbowBase.y, parentTransform: parentT };
+            computedPivots[middlePivotKey] = { x: middleBase.x, y: middleBase.y, parentTransform: parentT };
 
-            // Lower limb
-            if (visibility[lowerName] !== false) {
-                const eJoff = jointOffset[elbowPivotKey] || { x: 0, y: 0 };
-                const lw = (dimensions[lowerName]?.width || 25) * imageScale;
-                const lh = (dimensions[lowerName]?.height || 45) * imageScale;
-                const lRot = rotations[lowerName] || 0;
-                const lSelfRot = selfRotations[lowerName] || 0;
+            // Middle limb (forearm/calf)
+            if (visibility[middleName] !== false) {
+                const mJoff = jointOffset[middlePivotKey] || { x: 0, y: 0 };
+                const mw = (dimensions[middleName]?.width || 25) * imageScale;
+                const mh = (dimensions[middleName]?.height || 45) * imageScale;
+                const mRot = rotations[middleName] || 0;
+                const mSelfRot = selfRotations[middleName] || 0;
 
                 // Step 3: elbow/knee joint offset from upper parent
-                const foreParent = applyTransform(parentT, {
-                    x: ePivot.x || 0, y: (ePivot.y || 0) - upperH,
-                    rotation: lRot, scaleX: 1, scaleY: 1,
+                const middleParent = applyTransform(parentT, {
+                    x: mPivot.x || 0, y: (mPivot.y || 0) - upperH,
+                    rotation: mRot, scaleX: 1, scaleY: 1,
                 });
-                // Step 4: center lower image
-                const foreT = applyTransform(foreParent, {
-                    x: eJoff.x || 0, y: (eJoff.y || 0) - lh / 2,
-                    rotation: lSelfRot, scaleX: 1, scaleY: 1,
+                // Step 4: center middle image
+                const middleT = applyTransform(middleParent, {
+                    x: mJoff.x || 0, y: (mJoff.y || 0) - mh / 2,
+                    rotation: mSelfRot, scaleX: 1, scaleY: 1,
                 });
                 objects.push({
-                    name: lowerName, x: foreT.x, y: foreT.y,
-                    rotation: foreT.rotation, scaleX: foreT.scaleX, scaleY: foreT.scaleY,
-                    w: lw, h: lh, anchorX: 0.5, anchorY: 0.5,
-                    zIndex: zIndexValues[lowerName] || 1,
-                    img: loadedImages[lowerImgKey || lowerName],
+                    name: middleName, x: middleT.x, y: middleT.y,
+                    rotation: middleT.rotation, scaleX: middleT.scaleX, scaleY: middleT.scaleY,
+                    w: mw, h: mh, anchorX: 0.5, anchorY: 0.5,
+                    zIndex: zIndexValues[middleName] || 1,
+                    img: loadedImages[middleImgKey || middleName],
                 });
+
+                // Compute wrist/ankle pivot world position (middle → end limb)
+                const middleH = (dimensions[middleName]?.height || 45);
+                const ePivot = pivotPoints[endPivotKey] || { x: 0, y: 0 };
+                const endBase = applyTransform(middleParent, {
+                    x: ePivot.x || 0, y: (ePivot.y || 0) - middleH,
+                    rotation: 0, scaleX: 1, scaleY: 1,
+                });
+                computedPivots[endPivotKey] = { x: endBase.x, y: endBase.y, parentTransform: middleParent };
+
+                // End limb (hand/foot)
+                if (visibility[endName] !== false) {
+                    const eJoff = jointOffset[endPivotKey] || { x: 0, y: 0 };
+                    const ew = (dimensions[endName]?.width || 20) * imageScale;
+                    const eh = (dimensions[endName]?.height || 20) * imageScale;
+                    const eRot = rotations[endName] || 0;
+                    const eSelfRot = selfRotations[endName] || 0;
+
+                    // Step 5: wrist/ankle joint offset from middle parent
+                    const endParent = applyTransform(middleParent, {
+                        x: ePivot.x || 0, y: (ePivot.y || 0) - middleH,
+                        rotation: eRot, scaleX: 1, scaleY: 1,
+                    });
+                    // Step 6: center end image
+                    const endT = applyTransform(endParent, {
+                        x: eJoff.x || 0, y: (eJoff.y || 0) - eh / 2,
+                        rotation: eSelfRot, scaleX: 1, scaleY: 1,
+                    });
+                    objects.push({
+                        name: endName, x: endT.x, y: endT.y,
+                        rotation: endT.rotation, scaleX: endT.scaleX, scaleY: endT.scaleY,
+                        w: ew, h: eh, anchorX: 0.5, anchorY: 0.5,
+                        zIndex: zIndexValues[endName] || 1,
+                        img: loadedImages[endImgKey || endName],
+                    });
+                }
             }
         }
     }
 
     addChain('torso_leftUpperArm', 'leftUpperArm', 'leftUpperArm',
-             'leftUpperArm_leftForearm', 'leftForearm', 'leftForearm');
+             'leftUpperArm_leftForearm', 'leftForearm', 'leftForearm',
+             'leftForearm_leftHand', 'leftHand', 'leftHand');
     addChain('torso_rightUpperArm', 'rightUpperArm', 'rightUpperArm',
-             'rightUpperArm_rightForearm', 'rightForearm', 'rightForearm');
+             'rightUpperArm_rightForearm', 'rightForearm', 'rightForearm',
+             'rightForearm_rightHand', 'rightHand', 'rightHand');
     addChain('torso_leftThigh', 'leftThigh', 'leftThigh',
-             'leftThigh_leftLeg', 'leftLeg', 'leftLeg');
+             'leftThigh_leftLeg', 'leftLeg', 'leftLeg',
+             'leftLeg_leftFoot', 'leftFoot', 'leftFoot');
     addChain('torso_rightThigh', 'rightThigh', 'rightThigh',
-             'rightThigh_rightLeg', 'rightLeg', 'rightLeg');
+             'rightThigh_rightLeg', 'rightLeg', 'rightLeg',
+             'rightLeg_rightFoot', 'rightFoot', 'rightFoot');
 
     objects.sort((a, b) => a.zIndex - b.zIndex);
     return { objects, pivotPoints: computedPivots };
@@ -1370,8 +1423,12 @@ const PART_TO_PIVOT = {
     rightThigh: 'torso_rightThigh',
     leftForearm: 'leftUpperArm_leftForearm',
     rightForearm: 'rightUpperArm_rightForearm',
+    leftHand: 'leftForearm_leftHand',
+    rightHand: 'rightForearm_rightHand',
     leftLeg: 'leftThigh_leftLeg',
     rightLeg: 'rightThigh_rightLeg',
+    leftFoot: 'leftLeg_leftFoot',
+    rightFoot: 'rightLeg_rightFoot',
 };
 
 // Preview canvas mouse events
