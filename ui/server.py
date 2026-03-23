@@ -24,19 +24,21 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# Basic auth
-AUTH_USER = os.environ.get("AUTH_USER", "admin")
-AUTH_PASS = os.environ.get("AUTH_PASS", "diecut")
-security = HTTPBasic()
+# Basic auth (disabled when AUTH_USER and AUTH_PASS are not set)
+AUTH_USER = os.environ.get("AUTH_USER", "")
+AUTH_PASS = os.environ.get("AUTH_PASS", "")
+AUTH_ENABLED = bool(AUTH_USER and AUTH_PASS)
 
+if AUTH_ENABLED:
+    security = HTTPBasic()
 
-def check_auth(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_user = hmac.compare_digest(credentials.username, AUTH_USER)
-    correct_pass = hmac.compare_digest(credentials.password, AUTH_PASS)
-    if not (correct_user and correct_pass):
-        raise HTTPException(status_code=401, detail="Unauthorized",
-                            headers={"WWW-Authenticate": "Basic"})
-    return credentials.username
+    def check_auth(credentials: HTTPBasicCredentials = Depends(security)):
+        correct_user = hmac.compare_digest(credentials.username, AUTH_USER)
+        correct_pass = hmac.compare_digest(credentials.password, AUTH_PASS)
+        if not (correct_user and correct_pass):
+            raise HTTPException(status_code=401, detail="Unauthorized",
+                                headers={"WWW-Authenticate": "Basic"})
+        return credentials.username
 
 # Add parent dir to path so we can import processing modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -46,7 +48,8 @@ from google import genai
 from processing import diecut, bboxes, rig
 from processing.simple_background import remove_background_simple
 
-app = FastAPI(title="Auto-Rig UI", dependencies=[Depends(check_auth)])
+app_deps = [Depends(check_auth)] if AUTH_ENABLED else []
+app = FastAPI(title="Auto-Rig UI", dependencies=app_deps)
 
 # Serve static files
 static_dir = os.path.join(os.path.dirname(__file__), "static")
