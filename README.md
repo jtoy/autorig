@@ -78,6 +78,26 @@ npm install distark-render
 
 This enables `distark-check verify`, `distark-check render`, and `distark-check test` commands used during rig generation to validate output.
 
+## Quick Start
+
+After completing the setup above, here's the fastest way to see the pipeline in action:
+
+```bash
+# 1. Install dependencies (if you haven't already)
+pip install -r requirements.txt
+
+# 2. Start the web UI
+python -m uvicorn ui.server:app --host 0.0.0.0 --port 8888
+```
+
+3. Open http://localhost:8888 in your browser
+4. Click **"Choose File"** and upload one of the test images from `resources/` (e.g. `resources/hippo.png`)
+5. Click **"Run Pipeline"** — this runs all 4 steps (diecut → bboxes → background removal → rig). It takes 1-3 minutes depending on the Gemini model and number of refinement rounds.
+6. When it finishes, you'll see:
+   - The **cropped body parts** in the parts panel on the left
+   - The **assembled rig preview** on the right, showing the character reconstructed from its parts
+   - You can click parts to edit them, adjust pivot points, toggle animation, and compare against the original image
+
 ## Usage
 
 ### Option A: Web UI (Recommended)
@@ -100,7 +120,7 @@ If either is unset or empty, the server runs without authentication.
 
 #### Web UI Workflow
 
-1. **Upload** — Click "Choose File" and upload a character PNG image
+1. **Upload** — Click "Choose File" and upload a character PNG image (test images are in the `resources/` folder — try `hippo.png`, `tobyturtle.png`, `papa.png`, or `grandpa.png`)
 2. **Run Pipeline** — Click "Run Pipeline" to execute all 4 steps automatically, or run each step individually:
    - **Diecut** — generates the composite diecut image
    - **Bboxes** — detects and crops the 14 body parts
